@@ -35,7 +35,8 @@ class K_Translator:
             types=self.original_domain.types,
             predicates=ensure_set(predicates),
             actions=actions,
-            sensing_models=sensing_models
+            sensing_models=sensing_models,
+            constants=self.original_domain.constants
         )
 
         self.translated_problem = Problem(
@@ -48,7 +49,7 @@ class K_Translator:
             goal=self.k_translate_formula(self.original_problem.goal),
             requirements=self.original_problem.requirements
         ) if self.original_problem else None
-
+        
     def k_translate_formula(self, formula: Formula) -> Formula:
         """Translate a formula to K-translation."""
         if isinstance(formula, Not):
@@ -158,9 +159,12 @@ class K_Translator:
         return new_effects
     
     def translate_sensing_model(self, model) -> SensingModel:
+        new_precondition = self.k_translate_formula(model.precondition)
         new_literal = self.k_translate_formula(model.literal)
         new_condition = self.k_translate_formula(model.condition)
         return SensingModel(
+            parameters = model.parameters,
+            precondition = new_precondition,
             literal=new_literal,
             condition=new_condition
         )
