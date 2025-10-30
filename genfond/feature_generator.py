@@ -15,12 +15,12 @@ from .state_space_generator import (
     State,
     StateSpaceGraph,
     StateSpaceNode,
-    apply_effects,
+    apply_effect,
     check_formula,
     generate_state_space,
 )
 
-type Feature = Boolean | Numerical
+Feature = Boolean | Numerical
 
 log = logging.getLogger("genfond.feature_generation")
 
@@ -55,8 +55,8 @@ def construct_vocabulary_info(domain: Domain, config: Mapping) -> VocabularyInfo
     return vocabulary
 
 
-def _get_state_from_goal(goal_formula: Formula):
-    states = apply_effects(set([frozenset()]), goal_formula)
+def _get_state_from_goal(goal_formula: Formula, problem: Problem, domain: Domain) -> State:
+    states = apply_effect(frozenset(), goal_formula, problem, domain)
     assert len(states) == 1, f"Goal formula must define a unique goal state, found {len(states)} states: {states}"
     state = next(iter(states))
     goal_state = {Predicate(f"{predicate.name}_G", *predicate.terms) for predicate in state}
@@ -86,7 +86,7 @@ def construct_instance_info(
 
 
 def get_goal_augmented_state(problem: Problem, state: State) -> State:
-    return frozenset(state | _get_state_from_goal(problem.goal))
+    return frozenset(state | _get_state_from_goal(problem.goal, problem, problem.domain))
 
 
 def get_param_augmented_state(problem: Problem, state: State, _, param: str) -> State:

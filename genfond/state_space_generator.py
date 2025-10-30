@@ -1,3 +1,4 @@
+import itertools
 import logging
 import random
 from collections.abc import Collection
@@ -6,8 +7,8 @@ from typing import Optional
 
 from pddl.action import Action
 from pddl.core import Domain, Problem
-from pddl.logic import Predicate
-from pddl.logic.base import And, Formula, Not, OneOf
+from pddl.logic import Predicate, SensingModel
+from pddl.logic.base import And, Formula, Not, OneOf, is_literal, Or
 from pddl.logic.effects import When
 from pddl.logic.functions import (
     Assign,
@@ -33,11 +34,11 @@ from pddl.logic.functions import (
 )
 from pddl.logic.predicates import EqualTo
 
-from .ground import ground
+from .ground import ground, ground_domain_predicates, ground_sensing_models
 
 log = logging.getLogger("genfond.state_space_generator")
 
-type State = frozenset[Formula]
+State = frozenset[Formula]
 
 
 def state_to_string(state: State) -> str:
@@ -78,6 +79,8 @@ def check_formula(state: State, formula: Formula) -> bool:
     elif isinstance(formula, Not):
         return not check_formula(state, formula.argument)
     elif isinstance(formula, Predicate):
+        if "EqualTo" in formula.name:
+            return formula.terms[0] == formula.terms[1]
         return formula in state
     elif isinstance(formula, EqualTo):
         return formula.left == formula.right
@@ -94,49 +97,117 @@ def check_formula(state: State, formula: Formula) -> bool:
     else:
         raise ValueError("Unknown formula type: {}".format(type(formula)))
 
+def is_dnf(condition: Formula) -> bool:
+    if isinstance(condition, Or):
+        return all(isinstance(c, And) and all(is_literal(l) for l in c.operands) for c in condition.operands)
+    elif isinstance(condition, And):
+        return all(is_literal(l) for l in condition.operands)
+    elif is_literal(condition):
+        return True
+    else:
+        return False
 
-def apply_action_effects(state: State, action: Action) -> set[State]:
-    return apply_effects(frozenset({state}), action.effect)
+def observed_literal_to_action_name(literal: Predicate) -> str:
+    """Convert a literal to a valid action name that matches the regex [A-Za-z][-_A-Za-z0-9]*"""
+    # Convert the entire literal to string, remove parentheses, and replace spaces with underscores
+    action_name = str(literal).replace('(', '').replace(')', '').replace(' ', '_')
+    return action_name    
+
+def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel]) -> list[Action]:
+    sensing_actions = []
+    for model in grounded_sensing_models:
+        inverse_model = next((m for m in grounded_sensing_models if m.literal == inverse_literal(model.literal)), None)
+        if not inverse_model:
+            raise ValueError("No inverse model found for sensing model {}".format(model.literal))
+        sensing_action = Action(
+            name=observed_literal_to_action_name(model.literal),
+            parameters=model.parameters,
+            precondition=model.precondition,
+            effect=get_effects_from_dnf(inverse_model.condition, model.literal)
+        )
+        #print(sensing_action)
+        sensing_actions.append(sensing_action)
+    return sensing_actions
+
+def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
+    effect_list = []
+    if not is_dnf(condition):
+        #condition = convert_to_dnf(condition)
+        raise ValueError("Sensing model condition is not in DNF.")
+    if isinstance(condition, Or):
+        for conjunct in condition.operands:
+            for literal in conjunct.operands:
+                rest_conjuncts = set(conjunct.operands) - {literal}
+                effect_list.append(When(
+                    And(*rest_conjuncts, Not(literal)),
+                    inverse_literal(literal)
+                ))
+    elif isinstance(condition, And):
+        for literal in condition.operands:
+            rest_conjuncts = set(condition.operands) - {literal}
+            effect_list.append(When(
+                And(*rest_conjuncts, Not(literal)),
+                inverse_literal(literal)
+            ))
+    elif is_literal(condition):
+        effect_list.append(When(
+            Not(condition),
+            inverse_literal(condition)
+        ))
+    return And(*effect_list)
+
+def apply_action_effect(state: State, action: Action, domain: Domain, problem: Problem) -> State:
+    return apply_effect(state, action.effect, domain, problem)
+
+def inverse_literal(literal: Predicate) -> Predicate:
+    if literal.name.startswith("K_pos_"):
+        return Predicate(f"K_neg_{literal.name[6:]}", *(literal.terms))
+    elif literal.name.startswith("K_neg_"):
+        return Predicate(f"K_pos_{literal.name[6:]}", *(literal.terms))
+    else:
+        raise ValueError("Literal must be a K_pos_ or K_neg_ literal.")
+
+def complement_literal(literal: Predicate, domain: Domain, problem: Problem) -> set[Predicate]:
+    ground_predicates = ground_domain_predicates(domain, problem)
+    if literal.name.startswith("K_pos_"):
+        complement_name = f"K_neg_{literal.name[6:]}"
+        return {p for p in ground_predicates if p.name == complement_name and p.terms != literal.terms}
+    else:
+        return {literal}
 
 
-def apply_effects(states: Collection[State], effects: Collection[Optional[Formula]]) -> set[State]:
-    new_states: set[State] = set()
-    for state in states:
-        new_states |= apply_effects_to_state(state, effects)
-        assert all(isinstance(s, Collection) for s in new_states)
-        assert all(all(isinstance(f, (Predicate, FunctionEqualTo)) for f in s) for s in new_states)
-    return new_states
-
-
-def apply_effects_to_state(state: State, effects: Collection[Optional[Formula]]) -> set[State]:
+def apply_effect(state: State, effect: Formula, domain: Domain, problem: Problem) -> State:
     assert all(isinstance(f, (Predicate, FunctionEqualTo)) for f in state)
-    if isinstance(effects, Collection):
-        states = {state}
-        for effect in effects:
-            states = apply_effects(states, effect)
-        return states
-    elif isinstance(effects, And) or isinstance(effects, And):
-        states = {state}
-        for effect in effects.operands:
-            states = apply_effects(states, effect)
-        return set(states)
-    elif isinstance(effects, Predicate):
-        return set({state | {effects}})
-    elif isinstance(effects, Not):
-        return set({frozenset([f for f in state if f != effects.argument])})
-    elif isinstance(effects, When):
-        if check_formula(state, effects.condition):
-            return apply_effects({state}, effects.effect)
+    if isinstance(effect, And):
+        for sub_effect in effect.operands:
+            state = apply_effect(state, sub_effect, domain, problem)
+        return state
+    elif isinstance(effect, Predicate):
+        new_state = state
+        print(f"Applying effect {effect}")
+        effect_complements = complement_literal(effect, domain, problem)
+        all_effects = {effect} | effect_complements
+        for effect in all_effects:
+            if inverse_literal(effect) in state:
+                new_state = set(f for f in state if f != inverse_literal(effect))
+        return frozenset(new_state | all_effects)
+    elif isinstance(effect, Not):
+        print(f"Applying effect {effect}")
+        return frozenset(f for f in state if f != effect.argument)
+    elif isinstance(effect, When):
+        if check_formula(state, effect.condition):
+            print(f"Applying effect {effect.effect} due to When condition {effect.condition}")
+            return apply_effect(state, effect.effect, domain, problem)
         else:
-            return set({state})
-    elif isinstance(effects, BinaryFunction):
-        if isinstance(effects.operands[0], NumericFunction):
-            fct = effects.operands[0]
-            change = eval_function_term(effects.operands[1], state)
+            return state
+    elif isinstance(effect, BinaryFunction):
+        if isinstance(effect.operands[0], NumericFunction):
+            fct = effect.operands[0]
+            change = eval_function_term(effect.operands[1], state)
         else:
             # DZC: What is this else case?
-            fct = effects.operands[1]
-            change = effects.operands[0]
+            fct = effect.operands[1]
+            change = effect.operands[0]
         assert isinstance(fct, NumericFunction)
         # DZC: remove this assert by evaluating change = eval_function_term(...)
         # assert isinstance(change, NumericValue)
@@ -147,27 +218,20 @@ def apply_effects_to_state(state: State, effects: Collection[Optional[Formula]])
             assert len(current_evals) == 1
             current_eval = current_evals[0]
         current_value = current_eval.operands[1].value
-        if isinstance(effects, Assign):
+        if isinstance(effect, Assign):
             new_value = change
-        elif isinstance(effects, Increase):
+        elif isinstance(effect, Increase):
             new_value = current_value + change
-        elif isinstance(effects, Decrease):
+        elif isinstance(effect, Decrease):
             new_value = current_value - change
-        elif isinstance(effects, (Plus, Minus, Times, Divide, ScaleUp, ScaleDown)):
+        elif isinstance(effect, (Plus, Minus, Times, Divide, ScaleUp, ScaleDown)):
             raise NotImplementedError()
         else:
-            raise ValueError("Unknown effect type: {}".format(type(effects)))
+            raise ValueError("Unknown effect type: {}".format(type(effect)))
         # log.debug(f'Change {fct} from {current_value} to {new_value}')
-        return frozenset(
-            {frozenset([f for f in state if f != current_eval] + [FunctionEqualTo(fct, NumericValue(new_value))])}
-        )
-    elif isinstance(effects, OneOf):
-        new_states = set()
-        for effect in effects.operands:
-            new_states |= apply_effects({state}, effect)
-        return frozenset(new_states)
+        return frozenset([f for f in state if f != current_eval] + [FunctionEqualTo(fct, NumericValue(new_value))])
     else:
-        raise ValueError("Unknown effect type: {}".format(type(effects)))
+        raise ValueError("Unknown effect type: {}".format(type(effect)))
 
 
 class Alive(Enum):
@@ -229,24 +293,37 @@ class StateSpaceGraph:
             self.next_id = 1
             self.nodes = {root_state: self.root}
             queue = [self.root]
-        grounded_actions = ground(domain, problem)
+        grounded_actions, constants = ground(domain, problem)
+        grounded_sensing_models = ground_sensing_models(domain, problem)
+        sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models)
         while queue:
+            print(f"Queue size: {len(queue)}")
             node = queue.pop()
             state = node.state
+            
             if check_formula(state, problem.goal):
                 node.alive = Alive.ALIVE
                 node.goal = True
             for action in grounded_actions:
+                print(f"Checking action {action.name} with precondition {action.precondition}")
                 if not check_formula(state, action.precondition):
                     continue
-                for succ in apply_action_effects(node.state, action):
-                    new_node = self.add_node(succ, state, action)
+                s_a = apply_action_effect(state, action, domain, problem)
+                print(f"Applied action {action.name}")
+                #combinations = list(itertools.product([0, 1], repeat=observation_type_count))
+                for sensing_action in sensing_actions:
+                    if not check_formula(state, sensing_action.precondition):
+                        continue
+                    #print(f"sensing action {sensing_action.name} on state")
+                    s_a_o = apply_action_effect(s_a, sensing_action, domain, problem)
+                    new_node = self.add_node(s_a_o, state, action)
                     if new_node:
-                        if max_num_val and any(v > max_num_val for v in get_num_vals(succ)):
+                        if max_num_val and any(v > max_num_val for v in get_num_vals(s_a_o)):
                             new_node.alive = Alive.NUM_PRUNED
-                        elif selected_states and succ not in selected_states:
-                            new_node.alive = Alive.PRUNED
+                        elif selected_states and s_a_o not in selected_states:
+                                new_node.alive = Alive.PRUNED
                         else:
+                            print(f"Adding new node with state {state_to_string(s_a_o)}")
                             queue.append(new_node)
         compute_alive(self.nodes.values())
         if prune:
@@ -362,6 +439,6 @@ def random_walk(domain: Domain, problem: Problem, initial_states: set[State], ma
             if not applicable_actions:
                 break
             action = random.choice(applicable_actions)
-            succ = random.choice(list(apply_action_effects(state, action)))
+            succ = random.choice(list(apply_action_effect(state, action)))
             states.append(succ)
             state = succ

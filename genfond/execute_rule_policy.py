@@ -157,7 +157,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
         else:
             raise ValueError(f"Unknown feature type: {feature}")
     # TODO _get_state_from_goal is internal
-    goal_state = _get_state_from_goal(problem.goal)
+    #goal_state = _get_state_from_goal(problem.goal, problem)
     log.debug("Grounding actions...")
     grounded_actions = ground(domain, problem)
     log.debug("Grounding actions done.")

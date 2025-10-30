@@ -122,7 +122,8 @@ class DatalogPolicyRule:
                 raise ValueError(f"Invalid diff value: {diff}")
         diff_cond_strs.sort()
         conds = state_cond_strs + state_aug_cond_strs + concept_cond_strs + roles_cond_strs + diff_cond_strs
-        return f'{self.name}({', '.join(self.parameters)}){f" :- {', '.join(conds)}" if conds else ""}.'
+        cond_str = f" :- {', '.join(conds)}" if conds else ""
+        return f'{self.name}({", ".join(self.parameters)}){cond_str}.'
 
     def __hash__(self) -> int:
         return hash(

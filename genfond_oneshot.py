@@ -12,6 +12,7 @@ from genfond.feature_generator import FeaturePool
 from genfond.generate_policy import PolicyType, generate_policy
 from genfond.solver import Solver
 from genfond.state_space_generator import Alive
+from genfond.translate_domain import K_Translator
 
 log = logging.getLogger(__name__)
 
@@ -151,7 +152,8 @@ def main():
     problems = []
     for problem_file in args.problem_file:
         problems.append(pddl.parse_problem(problem_file))
-    feature_pool = FeaturePool(domain, problems, config=config)
+    k_translator = K_Translator(domain, problems)
+    feature_pool = FeaturePool(k_translator.translated_domain, k_translator.translated_problems, config=config)
     log.info(
         f"Generated {len(feature_pool.features)} features, {len(feature_pool.concepts)} concepts, {len(feature_pool.roles)} roles."
     )

@@ -1,17 +1,18 @@
+from ast import Or
 import itertools
 from typing import Optional
 
 from pddl.action import Action
 from pddl.core import Domain, Problem
 from pddl.custom_types import name as name_type
-from pddl.logic import Predicate, Variable
-from pddl.logic.base import And, BinaryOp, Formula, UnaryOp
+from pddl.logic import Predicate, Variable, SensingModel
+from pddl.logic.base import And, BinaryOp, Formula, UnaryOp, QuantifiedCondition, ForallCondition, ExistsCondition, Or
 from pddl.logic.effects import When
 from pddl.logic.functions import BinaryFunction, NumericFunction, NumericValue
 from pddl.logic.predicates import EqualTo
 from pddl.logic.terms import Constant, Term
 
-type TypeTag = Optional[name_type]
+TypeTag = Optional[name_type]
 
 
 def _ground_term(term: Term, mapping: dict[Variable, Constant]) -> Constant:
@@ -51,6 +52,23 @@ def _ground_formula(op: Formula, mapping: dict[Variable, Constant]) -> Formula:
         return optype(op.name, *[_ground_term(t, mapping) for t in op.terms])
     else:
         raise TypeError(f"{op}: unknown operator type: {optype}")
+
+def _ground_quantified_formula(op: QuantifiedCondition, domain, problem, mapping: dict[Variable, Constant]) -> Formula:
+    if len(op.variables) > 1:
+        raise NotImplementedError("Grounding of quantified formulas with multiple variables is not implemented.")
+    constants = domain.constants | problem.objects
+    for variable in op.variables:
+        grounded_clauses = []
+        for const in constants:
+            if _check_types(const, variable, domain.types):
+                mapping[variable] = const
+                grounded_clause = _ground_formula(op.condition, mapping)
+                grounded_clauses.append(grounded_clause)
+        if isinstance(op, ForallCondition):
+            return And(*grounded_clauses)
+        elif isinstance(op, ExistsCondition):
+            return Or(*grounded_clauses)
+    raise TypeError(f"{op}: unknown quantified condition type: {type(op)}")
 
 
 def _is_subtype(subtype: TypeTag, supertype: TypeTag, type_dict: dict[TypeTag, TypeTag]) -> bool:
@@ -92,7 +110,7 @@ def ground(domain: Domain, problem: Problem) -> list[Action]:
             op = ground_action(domain, action, grounding)
             if op:
                 operators.append(op)
-    return sorted(operators, key=lambda a: (a.name, a.parameters))
+    return sorted(operators, key=lambda a: (a.name, a.parameters)), constants
 
 
 def ground_domain_predicates(domain: Domain, problem: Problem) -> set[Predicate]:
@@ -106,3 +124,20 @@ def ground_domain_predicates(domain: Domain, problem: Problem) -> set[Predicate]
             ground_predicate = _ground_formula(predicate, mapping)
             ground_predicates.add(ground_predicate)
     return ground_predicates
+
+def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]:
+    constants = domain.constants | problem.objects
+    ground_models = set()
+    for model in domain.sensing_models:
+        for grounding in itertools.product(constants, repeat=len(model.parameters)):
+            mapping = dict(zip(model.parameters, grounding))
+            if not all(_check_types(c, v, domain.types) for v, c in mapping.items()):
+                continue
+            ground_model = SensingModel(
+                parameters=grounding,
+                literal=_ground_formula(model.literal, mapping),
+                condition=_ground_quantified_formula(model.condition, domain, problem, mapping) if isinstance(model.condition, QuantifiedCondition) else _ground_formula(model.condition, mapping),
+                precondition=_ground_formula(model.precondition, mapping) if model.precondition else None,
+            )
+            ground_models.add(ground_model)   
+    return ground_models

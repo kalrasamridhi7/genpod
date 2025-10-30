@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple, Optional, Dict, Set, Collection
+from typing import List
 from pddl.logic.base import And, Formula, is_literal, Atomic, Not, Or, ForallCondition, ExistsCondition
 from pddl.logic import Predicate
 from pddl.logic.predicates import EqualTo
@@ -14,11 +14,11 @@ log = logging.getLogger(__name__)
 
 class K_Translator:
     """A translator that translates a domain and problem to K-translation."""
-    def __init__(self, domain: Domain, problem: Problem = None):
+    def __init__(self, domain: Domain, problems: List[Problem]):
         self.original_domain = domain
-        self.original_problem = problem
+        self.original_problems = problems
         self.translated_domain = None
-        self.translated_problem = None
+        self.translated_problems = []
 
         predicates = {
             self.k_pos_literal(pred) for pred in self.original_domain.predicates
@@ -39,17 +39,18 @@ class K_Translator:
             constants=self.original_domain.constants
         )
 
-        self.translated_problem = Problem(
-            name=self.original_problem.name,
-            domain=self.translated_domain,
-            objects=self.original_problem.objects,
-            init=ensure_set(
-                [self.k_translate_formula(fact) for fact in self.original_problem.init]
-            ),
-            goal=self.k_translate_formula(self.original_problem.goal),
-            requirements=self.original_problem.requirements
-        ) if self.original_problem else None
-        
+        for problem in self.original_problems:
+            self.translated_problems.append(Problem(
+                name=problem.name,
+                domain=self.translated_domain,
+                objects=problem.objects,
+                init=ensure_set(
+                    [self.k_translate_formula(fact) for fact in problem.init]
+                ),
+                goal=self.k_translate_formula(problem.goal),
+                requirements=problem.requirements
+            ) if problem else None
+            )
     def k_translate_formula(self, formula: Formula) -> Formula:
         """Translate a formula to K-translation."""
         if isinstance(formula, Not):
@@ -129,7 +130,6 @@ class K_Translator:
             new_effects.append(self.translate_conditional_effect(action.effect))
         elif isinstance(action.effect, And):
             for effect in action.effect.operands:
-                print(effect)
                 if is_literal(effect):
                     new_effects.append(self.k_translate_formula(effect))
                 elif isinstance(effect, When):
@@ -137,7 +137,6 @@ class K_Translator:
                 else:
                     raise ValueError("Effect must be a literal or a When formula.")
         else: raise ValueError("Action effect must be a literal, When, or And formula.")
-        print(new_effects)
         return Action(
             name=action.name,
             parameters=action.parameters,

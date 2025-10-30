@@ -20,7 +20,6 @@ from .execute_rule_policy import (
     state_satisfies_rule_conds,
 )
 from .feature_generator import (
-    _get_state_from_goal,
     construct_instance_info,
     construct_vocabulary_info,
     get_action_augmented_state,
