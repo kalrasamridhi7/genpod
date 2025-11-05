@@ -27,7 +27,7 @@ from .feature_generator import (
 )
 from .generate_rule_policy import feature_eval_to_cond
 from .ground import ground
-from .state_space_generator import State, apply_action_effects, check_formula
+from .state_space_generator import State, apply_action_effect, check_formula
 
 log = logging.getLogger("genfond.execution.datalog")
 
@@ -266,7 +266,7 @@ def execute_datalog_policy(
             log.info(f"{rule}")
             log.info(f"Applying action {action_string(action)}")
             found_rule = True
-            new_state = get_next_state(apply_action_effects(state, action))
+            new_state = get_next_state(apply_action_effect(state, action, domain, problem))
             trace[state] = new_state
             state = new_state
             num_steps += 1

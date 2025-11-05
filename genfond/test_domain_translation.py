@@ -13,7 +13,9 @@ def main():
     k_translator = K_Translator(domain, [problem])
     translated_domain = k_translator.translated_domain
     translated_problem = k_translator.translated_problems[0]
-    generate_state_space(translated_domain, translated_problem)
+    #print(problem_to_string(translated_problem))
+    graph = generate_state_space(translated_domain, translated_problem)
+    print(f"Generated state space with {len(graph.nodes)} nodes")
     return 0
 
 

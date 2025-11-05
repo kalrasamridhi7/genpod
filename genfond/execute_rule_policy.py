@@ -18,7 +18,7 @@ from .generate_rule_policy import feature_eval_to_cond
 from .ground import ground
 from .policy import PolicyType
 from .rule_policy import Cond, Effect, Policy
-from .state_space_generator import State, apply_action_effects, check_formula
+from .state_space_generator import State, apply_action_effect, check_formula
 
 log = logging.getLogger("genfond.execution.rule")
 
@@ -34,7 +34,7 @@ class NoActionError(PolicyExecutionError):
     def __init__(self, trace: dict[State, State], state: State):
         self.trace = trace
         self.state = state
-        super().__init__(f"No action found for state: {", ".join([str(p) for p in state])}")
+        super().__init__(f"No action found for state: {', '.join([str(p) for p in state])}")
 
 
 class CycleError(PolicyExecutionError):
@@ -60,7 +60,7 @@ def _get_dlplan_state(
             [mapping[predicate] for predicate in get_action_augmented_state(problem, state, config, action)],
         )
     except KeyError as e:
-        log.critical(f'Cannot find predicate in mapping {"\n".join(f"{k}: {v}" for k, v in mapping.items())}: {e}')
+        #log.critical(f'Cannot find predicate in mapping {"\n".join(f"{k}: {v}" for k, v in mapping.items())}: {e}')
         raise
 
 
@@ -198,7 +198,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
         for action in sorted(grounded_actions, key=lambda _: random.random()):
             if not check_formula(state, action.precondition):
                 continue
-            succs = apply_action_effects(state, action)
+            succs = apply_action_effect(state, action, domain, problem)
             log.debug(
                 "Action {} has {} successors: {}".format(
                     action_string(action),
@@ -209,7 +209,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
             succs_evals = [eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
             log.debug(f"succs_evals: {succs_evals}")
             succs_diffs = {eval_state_diff(feature_eval, succ_eval) for succ_eval in succs_evals}
-            log.debug(f'succs_diffs:\n{"\n".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
+            #log.debug(f'succs_diffs:\n{"\n".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
             ok = True
             for constraint in enabled_constraints:
                 if constraint.effs & succs_diffs:

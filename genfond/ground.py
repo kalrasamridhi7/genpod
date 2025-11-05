@@ -110,7 +110,7 @@ def ground(domain: Domain, problem: Problem) -> list[Action]:
             op = ground_action(domain, action, grounding)
             if op:
                 operators.append(op)
-    return sorted(operators, key=lambda a: (a.name, a.parameters)), constants
+    return sorted(operators, key=lambda a: (a.name, a.parameters))
 
 
 def ground_domain_predicates(domain: Domain, problem: Problem) -> set[Predicate]:
@@ -139,5 +139,5 @@ def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]
                 condition=_ground_quantified_formula(model.condition, domain, problem, mapping) if isinstance(model.condition, QuantifiedCondition) else _ground_formula(model.condition, mapping),
                 precondition=_ground_formula(model.precondition, mapping) if model.precondition else None,
             )
-            ground_models.add(ground_model)   
+            ground_models.add(ground_model)
     return ground_models

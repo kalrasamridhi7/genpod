@@ -15,6 +15,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from genfond.config_handler import DEFAULT_TYPE_CONFIGS, ConfigHandler
 from genfond.execute_policy import execute_policy
+from genfond.translate_domain import K_Translator
 
 from .iterative_solver import pnames, solve, solve_iteratively
 from .problem_iterator import MAX_COST
@@ -110,6 +111,7 @@ def main():
     problems = []
     for f in tqdm.tqdm(args.problem_file, disable=None):
         problems.append(pddl.parse_problem(f))
+    k_translator = K_Translator(domain, problems)
     name = args.name if args.name else domain.name
     log.info("Starting policy generation for domain {}".format(name))
     log.info(f"Generating policies of type {args.type}")
@@ -120,8 +122,8 @@ def main():
     if args.one_shot:
         solve_cpu_time_start = time.process_time()
         solution = solve(
-            domain,
-            problems,
+            k_translator.translated_domain,
+            k_translator.translated_problems,
             config=config,
             complexity=config["max_complexity"],
             all_generators=False,
@@ -143,7 +145,7 @@ def main():
             with open(args.output, "wb") as f:
                 pickle.dump(policy, f)
         sys.exit(0)
-    policy, succs, solve_stats = solve_iteratively(domain, problems, config)
+    policy, succs, solve_stats = solve_iteratively(k_translator.translated_domain, k_translator.translated_problems, config)
     stats.update(solve_stats)
     if args.output:
         with open(args.output, "wb") as f:

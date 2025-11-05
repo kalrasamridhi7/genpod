@@ -130,10 +130,10 @@ def main():
         loglevel = logging.INFO
     logging.basicConfig(level=loglevel)
     if args.type == "state":
-        solve_prog = "solve_state_type.lp"
+        solve_prog = "solve_state_constraints.lp"
         policy_type = PolicyType.CONSTRAINED
     elif args.type == "trans":
-        solve_prog = "solve_trans_type.lp"
+        solve_prog = "solve_trans_constraints.lp"
         policy_type = PolicyType.CONSTRAINED
     elif args.type == "none":
         solve_prog = "solve.lp"

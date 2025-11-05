@@ -9,6 +9,7 @@ from pddl.helpers.base import ensure_set
 from pddl.core import Domain, Problem
 from pddl.action import Action
 from pddl.parser.symbols import Symbols
+from genfond.ground import ground_domain_predicates
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,9 @@ class K_Translator:
         )
 
         for problem in self.original_problems:
-            self.translated_problems.append(Problem(
+            ground_predicates = ground_domain_predicates(domain, problem)
+            problem = enforce_closed_world_assumption(problem, ground_predicates)
+            translated_problem = Problem(
                 name=problem.name,
                 domain=self.translated_domain,
                 objects=problem.objects,
@@ -49,8 +52,9 @@ class K_Translator:
                 ),
                 goal=self.k_translate_formula(problem.goal),
                 requirements=problem.requirements
-            ) if problem else None
             )
+            self.translated_problems.append(translated_problem)
+
     def k_translate_formula(self, formula: Formula) -> Formula:
         """Translate a formula to K-translation."""
         if isinstance(formula, Not):
@@ -93,7 +97,7 @@ class K_Translator:
             )
         elif isinstance(literal, EqualTo):
             return Predicate(
-                f"K_neg_equalTo",
+                f"K_neg_EqualTo",
                 literal.left,
                 literal.right
             )
@@ -109,7 +113,7 @@ class K_Translator:
             )
         elif isinstance(literal, EqualTo):
             return Predicate(
-                f"K_pos_equalTo",
+                f"K_pos_EqualTo",
                 literal.left,
                 literal.right
             )
@@ -167,3 +171,23 @@ class K_Translator:
             literal=new_literal,
             condition=new_condition
         )
+
+def enforce_closed_world_assumption(problem: Problem, grounded_predicates: set[Predicate]) -> Problem:
+    """Enforce the closed world assumption on a problem by adding negated literals for all unmentioned grounded predicates."""
+    current_facts = problem.init
+    current_predicate_names = {fact.name for fact in current_facts if isinstance(fact, Predicate)}
+    all_facts = grounded_predicates
+    negated_facts = set()
+    for fact in all_facts:
+        if isinstance(fact, Predicate) and fact not in current_facts:
+            if fact.name in current_predicate_names:
+                negated_facts.add(Not(fact))
+    new_init = current_facts.union(negated_facts)
+    return Problem(
+        name=problem.name,
+        domain_name=problem.domain_name,
+        objects=problem.objects,
+        init=new_init,
+        goal=problem.goal,
+        requirements=problem.requirements
+    )

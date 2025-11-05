@@ -1,5 +1,5 @@
-(define (problem p2x2_no_pit)
-    (:domain wumpus_no_pit)
+(define (problem p2x2)
+    (:domain wumpus)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects
         p1-1 p1-2
@@ -13,7 +13,7 @@
         
         
         (adj p2-1 p2-2) (adj p2-2 p2-1)
-
+        (not (breeze p1-1))
         (not (stench p1-1))
         (not (glitter p1-1))
         (need-start)
