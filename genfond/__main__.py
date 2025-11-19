@@ -112,6 +112,8 @@ def main():
     for f in tqdm.tqdm(args.problem_file, disable=None):
         problems.append(pddl.parse_problem(f))
     k_translator = K_Translator(domain, problems)
+    domain = k_translator.translated_domain
+    problems = k_translator.translated_problems
     name = args.name if args.name else domain.name
     log.info("Starting policy generation for domain {}".format(name))
     log.info(f"Generating policies of type {args.type}")
@@ -145,7 +147,7 @@ def main():
             with open(args.output, "wb") as f:
                 pickle.dump(policy, f)
         sys.exit(0)
-    policy, succs, solve_stats = solve_iteratively(k_translator.translated_domain, k_translator.translated_problems, config)
+    policy, succs, solve_stats = solve_iteratively(domain, problems, config)
     stats.update(solve_stats)
     if args.output:
         with open(args.output, "wb") as f:

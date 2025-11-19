@@ -1,4 +1,3 @@
-from ast import Or
 import itertools
 from typing import Optional
 
@@ -141,3 +140,11 @@ def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]
             )
             ground_models.add(ground_model)
     return ground_models
+
+class Grounding:
+    def __init__(self, domain: Domain, problem: Problem):
+        self.domain = domain
+        self.problem = problem
+        self.grounded_actions = ground(domain, problem)
+        self.grounded_predicates = ground_domain_predicates(domain, problem)
+        self.grounded_sensing_models = ground_sensing_models(domain, problem)

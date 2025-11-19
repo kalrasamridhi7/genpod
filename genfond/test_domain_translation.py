@@ -7,7 +7,7 @@ from .translate_domain import K_Translator
 
 def main():
     print("test_domain_translation executed as script")
-    domain = parse_domain("domains/partially-observable-deterministic/wumpus/d.pddl")
+    domain = parse_domain("domains/partially-observable-deterministic/wumpus/d_no_pit.pddl")
     #print(domain_to_string(domain))
     problem = parse_problem("domains/partially-observable-deterministic/wumpus/p.pddl")
     k_translator = K_Translator(domain, [problem])

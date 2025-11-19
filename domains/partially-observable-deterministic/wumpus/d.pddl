@@ -1,4 +1,4 @@
-(define (domain wumpus_no_pit)
+(define (domain wumpus)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:types pos)
     (:predicates

@@ -15,10 +15,10 @@ from .feature_generator import (
     get_action_augmented_state,
 )
 from .generate_rule_policy import feature_eval_to_cond
-from .ground import ground
+from .ground import Grounding, ground
 from .policy import PolicyType
 from .rule_policy import Cond, Effect, Policy
-from .state_space_generator import State, apply_action_effect, check_formula
+from .state_space_generator import State, apply_action_effect, apply_action_effect_with_observations, check_formula, convert_sensing_model_to_actions
 
 log = logging.getLogger("genfond.execution.rule")
 
@@ -159,7 +159,10 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
     # TODO _get_state_from_goal is internal
     #goal_state = _get_state_from_goal(problem.goal, problem)
     log.debug("Grounding actions...")
-    grounded_actions = ground(domain, problem)
+    grounding = Grounding(domain, problem)
+    grounded_actions = grounding.grounded_actions
+    grounded_sensing_models = grounding.grounded_sensing_models
+    sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models)
     log.debug("Grounding actions done.")
     state = problem.init
     trace: dict[State, State] = dict()
@@ -198,7 +201,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
         for action in sorted(grounded_actions, key=lambda _: random.random()):
             if not check_formula(state, action.precondition):
                 continue
-            succs = apply_action_effect(state, action, domain, problem)
+            succs = apply_action_effect_with_observations(state, action, grounding, sensing_actions)
             log.debug(
                 "Action {} has {} successors: {}".format(
                     action_string(action),

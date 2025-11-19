@@ -16,28 +16,28 @@
     (:sensing-model
         :parameters (?j - pos)
         :model-for (stench ?j)
-        :precondition (at ?j)
+        :precondition (and (at ?j) (alive))
         :such-that (exists (?p - pos) (and (adj ?j ?p) (wumpus-at ?p)))
     )
 
     (:sensing-model
         :parameters (?j - pos)
         :model-for (not (stench ?j))
-        :precondition (at ?j)
+        :precondition (and (at ?j) (alive))
         :such-that (exists (?p - pos) (and (not (adj ?j ?p)) (wumpus-at ?p)))
     )
 
     (:sensing-model
         :parameters (?j - pos)
         :model-for (not (glitter ?j))
-        :precondition (at ?j)
+        :precondition (and (at ?j) (alive))
         :such-that (exists (?p - pos) (and (not (= ?p ?j)) (gold-at ?p)))
     )
     
     (:sensing-model
         :parameters (?j - pos)
         :model-for (glitter ?j)
-        :precondition (at ?j)
+        :precondition (and (at ?j) (alive))
         :such-that (gold-at ?j)
     )
 
@@ -49,7 +49,7 @@
 
     (:action move
         :parameters (?i ?j - pos)
-        :precondition (and (adj ?i ?j) (at ?i) (alive) (not (need-start)) (not (wumpus-at ?j)))
+        :precondition (and (adj ?i ?j) (at ?i) (alive) (not (need-start)))
         :effect (and (not (at ?i)) (at ?j)                                      
                      (when (wumpus-at ?j) (not (alive)))                    
                 )
