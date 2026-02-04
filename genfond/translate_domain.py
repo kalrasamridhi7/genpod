@@ -1,7 +1,7 @@
 import logging
 from typing import List
 from pddl.logic.base import And, Formula, is_literal, Atomic, Not, Or, ForallCondition, ExistsCondition
-from pddl.logic import Predicate
+from pddl.logic import Predicate, StateVariable, ObservableVariable, MultivaluedVariable
 from pddl.logic.predicates import EqualTo
 from pddl.logic.sensing_model import SensingModel
 from pddl.logic.effects import When, CondEffect
@@ -29,6 +29,8 @@ class K_Translator:
         })
         actions = [self.translate_action(action) for action in self.original_domain.actions]
         sensing_models = [self.translate_sensing_model(model) for model in self.original_domain.sensing_models]
+        state_variables = [self.translate_state_variable(var) for var in self.original_domain.state_variables]
+        observable_variables = [self.translate_state_variable(var) for var in self.original_domain.observable_variables]
         # add sensing actions for each observable literal
         self.translated_domain = Domain(
             name=self.original_domain.name,
@@ -37,7 +39,9 @@ class K_Translator:
             predicates=ensure_set(predicates),
             actions=actions,
             sensing_models=sensing_models,
-            constants=self.original_domain.constants
+            constants=self.original_domain.constants,
+            state_variables=[StateVariable(var.variable, var.exception, var.formula) for var in state_variables],
+            observable_variables=[ObservableVariable(var.variable, var.exception, var.formula) for var in observable_variables]
         )
 
         for problem in self.original_problems:
@@ -61,9 +65,9 @@ class K_Translator:
             if is_literal(formula):
                 return self.k_neg_literal(formula.argument)
             elif isinstance(formula.argument, And):
-                return self.k_translate_formula(Or([(Not(f)) for f in formula.operands]))
+                return self.k_translate_formula(Or(*[Not(f) for f in formula.argument.operands]))
             elif isinstance(formula.argument, Or):
-                return self.k_translate_formula(And([(Not(f)) for f in formula.operands]))
+                return self.k_translate_formula(And(*[Not(f) for f in formula.argument.operands]))
             elif isinstance(formula.argument, Not):
                 return self.k_translate_formula(formula.argument.argument)
             else:
@@ -102,8 +106,7 @@ class K_Translator:
                 literal.right
             )
         else: 
-            print(type(literal))
-            raise ValueError("Other atomic formulas than Predicate and EqualTo are not supported.")
+            raise ValueError(f"Formula type: {type(literal)}. Other atomic formulas than Predicate and EqualTo are not supported.")
 
     def k_pos_literal(self, literal: Atomic) -> Atomic:
         if isinstance(literal, Predicate):
@@ -131,7 +134,7 @@ class K_Translator:
         if is_literal(action.effect):
             new_effects.append(self.k_translate_formula(action.effect))
         elif isinstance(action.effect, When):
-            new_effects.append(self.translate_conditional_effect(action.effect))
+            new_effects.extend(self.translate_conditional_effect(action.effect))
         elif isinstance(action.effect, And):
             for effect in action.effect.operands:
                 if is_literal(effect):
@@ -171,6 +174,14 @@ class K_Translator:
             literal=new_literal,
             condition=new_condition
         )
+    
+    def translate_state_variable(self, var: MultivaluedVariable) -> MultivaluedVariable:
+        var = MultivaluedVariable(
+            variable=var.variable,
+            exception=self.k_translate_formula(var.exception) if var.exception else None,
+            formula=self.k_translate_formula(var.formula)
+        )
+        return(var)
 
 def enforce_closed_world_assumption(problem: Problem, grounded_predicates: set[Predicate]) -> Problem:
     """Enforce the closed world assumption on a problem by adding negated literals for all unmentioned grounded predicates."""

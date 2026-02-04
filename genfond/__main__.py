@@ -90,6 +90,8 @@ def main():
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-8s %(message)s",
+        filemode='w',
+        filename='output.log'
     )
     signal.signal(signal.SIGINT, signal_handler)
     config = ConfigHandler(args.config, args.type, vars(args))

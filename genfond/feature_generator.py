@@ -56,6 +56,7 @@ def construct_vocabulary_info(domain: Domain, config: Mapping) -> VocabularyInfo
 
 
 def _get_state_from_goal(goal_formula: Formula, problem: Problem, domain: Domain) -> State:
+    log.debug(f"goal formula: {goal_formula}")
     states = apply_effect(frozenset(), goal_formula, grounding=Grounding(domain, problem))
     assert len(states) == 1, f"Goal formula must define a unique goal state, found {len(states)} states: {states}"
     #state = next(iter(states))

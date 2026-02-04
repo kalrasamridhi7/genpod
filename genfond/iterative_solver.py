@@ -205,6 +205,8 @@ def solve_iteratively(
             best_solve_cpu_time = solve_cpu_time
             problem_iterator.set_last_result(Result.SUCCESS, cost=new_policy.cost)
             policy = new_policy
+            plan = execute_policy(domain, problems[0], policy, config)
+            solved = True
             log.info(f'Testing policy on unsolved problems {config["policy_iterations"]} times ...')
             with logging_redirect_tqdm():
                 for problem in tqdm.tqdm(problems, disable=None):

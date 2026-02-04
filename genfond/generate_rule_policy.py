@@ -95,6 +95,7 @@ def generate_rule_policy(solution: dict[str, Any], policy_type: PolicyType = Pol
     constraints = set()
     state_constraints = set()
     features = solution["selected"]
+    print(solution)
     for instance, state, action in solution["good_action"]:
         rule = selected_action_to_rule(instance, state, action, solution["bool_eval"], solution["good_trans_delta"])
         if rule:

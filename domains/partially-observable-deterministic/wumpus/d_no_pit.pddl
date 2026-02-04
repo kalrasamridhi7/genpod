@@ -13,6 +13,13 @@
         (alive)
     )
 
+    (:state-variable (agent-pos) (forall (?p - pos) (at ?p)))                           
+    (:state-variable (gold-pos) (got-the-treasure) (forall (?p - pos) (gold-at ?p)))    
+    (:state-variable (wumpus-pos) (forall (?p - pos) (wumpus-at ?p)))
+    (:obs-variable (stench-var ?p - pos) (stench ?p))                                ; binary variable
+    (:obs-variable (breeze-var ?p - pos) (breeze ?p))                                ; binary variable
+    (:obs-variable (glitter-var ?p - pos) (glitter ?p))                              ; binary variable
+
     (:sensing-model
         :parameters (?j - pos)
         :model-for (stench ?j)

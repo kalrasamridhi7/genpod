@@ -141,6 +141,42 @@ def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]
             ground_models.add(ground_model)
     return ground_models
 
+def ground_state_variables(domain, problem, grounded_predicates, is_observable) -> dict[Predicate, set[Predicate]]:
+    grounded_state_vars = dict()
+    multivalued_variables = domain.state_variables if not is_observable else domain.observable_variables
+    for var in multivalued_variables:
+        if isinstance(var.formula, Predicate):
+            if var.formula.arity != len(var.variable.terms):
+                raise ValueError("state variable definition is not correct")
+            for pred in grounded_predicates:
+                if pred.name == var.formula.name:
+                    mapping = dict(zip(var.variable.terms, pred.terms))
+                    grounded_state_vars[_ground_formula(var.variable, mapping)] = set([pred, inverse_literal(pred)])
+        elif isinstance(var.formula, ForallCondition) and isinstance(var.formula.condition, Predicate):
+            if len(var.parameters) == 0:
+                grounded_state_vars[var.variable] = set([pred for pred in grounded_predicates if pred.name == var.formula.condition.name])
+            else:
+                constants = domain.constants | problem.objects
+                for grounding in itertools.product(constants, repeat=var.variable.arity):
+                    mapping = dict(zip(var.parameters, grounding))
+                    if not all(_check_types(c, v, domain.types) for v, c in mapping.items()):
+                        continue
+                    grounded_var = _ground_formula(var.variable, mapping)
+                    grounded_state_vars[grounded_var] = set([x for x in grounded_predicates 
+                                                             if x.name == var.formula.condition.name 
+                                                             and set(grounded_var.terms) <= set(x.terms)])
+        else:
+            raise ValueError("Unsupported formula type for state/observable variables")
+    return grounded_state_vars
+
+def inverse_literal(literal: Predicate) -> Predicate:
+    if literal.name.startswith("K_pos_"):
+        return Predicate(f"K_neg_{literal.name[6:]}", *(literal.terms))
+    elif literal.name.startswith("K_neg_"):
+        return Predicate(f"K_pos_{literal.name[6:]}", *(literal.terms))
+    else:
+        raise ValueError("Literal must be a K_pos_ or K_neg_ literal.")
+
 class Grounding:
     def __init__(self, domain: Domain, problem: Problem):
         self.domain = domain
@@ -148,3 +184,5 @@ class Grounding:
         self.grounded_actions = ground(domain, problem)
         self.grounded_predicates = ground_domain_predicates(domain, problem)
         self.grounded_sensing_models = ground_sensing_models(domain, problem)
+        self.grounded_state_variables = ground_state_variables(domain, problem, self.grounded_predicates, False)
+        self.grounded_observable_variables = ground_state_variables(domain, problem, self.grounded_predicates, True)

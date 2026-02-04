@@ -723,7 +723,7 @@ lark = ">=1.1.5,<1.2.0"
 type = "git"
 url = "https://github.com/kalrasamridhi7/pddl.git"
 reference = "skalra/pod-parsing"
-resolved_reference = "5247afeeebf9129868a515043d3fdbe3191c6102"
+resolved_reference = "672967e19e85bfe21d04927bb3de8cbdc6355990"
 
 [[package]]
 name = "pexpect"

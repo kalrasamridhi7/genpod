@@ -18,9 +18,10 @@ from .generate_rule_policy import feature_eval_to_cond
 from .ground import Grounding, ground
 from .policy import PolicyType
 from .rule_policy import Cond, Effect, Policy
-from .state_space_generator import State, apply_action_effect, apply_action_effect_with_observations, check_formula, convert_sensing_model_to_actions
+from .state_space_generator import State, apply_action_effect, apply_action_effect_with_observations, check_formula, convert_sensing_model_to_actions, observed_literal_to_action_name
 
-log = logging.getLogger("genfond.execution.rule")
+
+log = logging.getLogger("genfond.rule_policy")
 
 
 class PolicyExecutionError(RuntimeError):
@@ -162,9 +163,13 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
     grounding = Grounding(domain, problem)
     grounded_actions = grounding.grounded_actions
     grounded_sensing_models = grounding.grounded_sensing_models
-    sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models)
+    sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models, grounding.grounded_observable_variables)
     log.debug("Grounding actions done.")
     state = problem.init
+    for fact in problem.init:
+                for sensing_action in sensing_actions:
+                    if observed_literal_to_action_name(fact) == sensing_action.name:
+                        state = apply_action_effect(state, sensing_action, grounding)
     trace: dict[State, State] = dict()
     num_steps = 0
     actions_taken = []
@@ -188,6 +193,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
             for constraint in policy.constraints
             if state_satisfies_rule_conds(bool_feature_eval, constraint.conds)
         }
+        print(policy.constraints)
         log.debug("Enabled constraints: {}".format(",  ".join([str(c) for c in enabled_constraints])))
         if not enabled_rules:
             log.error("No rule enabled!")
@@ -206,13 +212,13 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
                 "Action {} has {} successors: {}".format(
                     action_string(action),
                     len(succs),
-                    "; ".join([state_string(s) for s in succs]),
+                    ";\n ".join([state_string(s) for s in succs]),
                 )
             )
             succs_evals = [eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
             log.debug(f"succs_evals: {succs_evals}")
             succs_diffs = {eval_state_diff(feature_eval, succ_eval) for succ_eval in succs_evals}
-            #log.debug(f'succs_diffs:\n{"\n".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
+            log.debug(f'succs_diffs:\n{";".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
             ok = True
             for constraint in enabled_constraints:
                 if constraint.effs & succs_diffs:
@@ -237,6 +243,7 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
                 continue
             for rule in enabled_rules:
                 log.debug(f"Checking rule {rule}")
+                log.debug(f'rule effs type {type(rule.effs)} and :\n{";".join([", ".join([str(d) for d in ds]) for ds in rule.effs])}')
                 if rule.effs == succs_diffs or policy.type == PolicyType.CONSTRAINED and rule.effs & succs_diffs:
                     found_rule = True
                     log.info(f"Found matching rule:\n{rule}")
@@ -257,4 +264,5 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
         log.error("Goal not reached!")
         raise RuntimeError("Goal not reached!")
     log.info("Goal reached!")
+    log.debug(f"actions taken: {actions_taken}")
     return actions_taken

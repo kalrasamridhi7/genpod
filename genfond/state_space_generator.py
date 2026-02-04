@@ -1,5 +1,6 @@
 import itertools
 import logging
+import queue
 import random
 from collections.abc import Collection
 from enum import Enum
@@ -34,7 +35,7 @@ from pddl.logic.functions import (
 )
 from pddl.logic.predicates import EqualTo
 
-from .ground import Grounding, ground
+from .ground import Grounding, ground, inverse_literal
 
 log = logging.getLogger("genfond.state_space_generator")
 
@@ -117,23 +118,23 @@ def observed_literal_to_action_name(literal: Predicate) -> str:
     action_name = str(literal).replace('(', '').replace(')', '').replace(' ', '_')
     return action_name    
 
-def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel]) -> list[Action]:
+def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel], 
+                                     grounded_obs_variables: dict[Predicate, set[Predicate]]) -> list[Action]:
     sensing_actions = []
     for model in grounded_sensing_models:
-        inverse_model = next((m for m in grounded_sensing_models if m.literal == inverse_literal(model.literal)), None)
-        if not inverse_model:
+        inverse_models = []
+        for key, predicate_set in grounded_obs_variables.items():
+            if model.literal in predicate_set:
+                inverse_models.extend([m for m in grounded_sensing_models if m.literal in predicate_set - {model.literal}])
+        if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
-        if not isinstance(model.condition, Or) and is_dnf(model.condition):
-            action_effect = (And(model.condition, model.literal))
-        else:
-            action_effect = And(get_effects_from_dnf(inverse_model.condition, model.literal), model.literal)
+        action_effect = And(*[get_effects_from_dnf(inverse_model.condition, model.literal) for inverse_model in inverse_models], model.literal)
         sensing_action = Action(
             name=observed_literal_to_action_name(model.literal),
             parameters=model.parameters,
-            precondition=And(model.precondition, Not(model.literal), Not(inverse_model.literal)),
+            precondition=And(model.precondition, Not(model.literal), *[Not(m.literal) for m in inverse_models]),
             effect=action_effect
         )
-        #print(sensing_action)
         sensing_actions.append(sensing_action)
     return sensing_actions
 
@@ -165,28 +166,34 @@ def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
     return And(*effect_list)
 
 def apply_action_effect(state: State, action: Action, grounding: Grounding) -> State:
-    print(f"Applying action effect for action {action.name}")
+    log.debug(f"Applying action effect for action {action.name}")
     return apply_effect(state, action.effect, grounding)
 
 def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action]) -> set[State]:
     if action:
         s_a = apply_action_effect(state, action, grounding)
     new_states = set()
-    observable_variables = get_observable_variables(grounding.domain)
-    #print(f"observable_variables: {observable_variables}")
     applicable_sensing_actions = []
     for sensing_action in sensing_actions:
         model = next((m for m in grounding.grounded_sensing_models if observed_literal_to_action_name(m.literal) == sensing_action.name), None)
-        inverse_model = next((m for m in grounding.grounded_sensing_models if m.literal == inverse_literal(model.literal)), None)
-        if not inverse_model:
+        inverse_models = []
+        for key, predicate_set in grounding.grounded_observable_variables.items():
+            if model.literal in predicate_set:
+                inverse_models.extend([m for m in grounding.grounded_sensing_models if m.literal in predicate_set - {model.literal}])
+        if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
-        if check_formula(s_a, sensing_action.precondition) and not check_formula(s_a, inverse_model.condition):
+        if check_formula(s_a, sensing_action.precondition) and not any(check_formula(s_a, im.condition) for im in inverse_models):
             applicable_sensing_actions.append(sensing_action)
-    print(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
+    log.debug(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
     if not applicable_sensing_actions:
         return {s_a}
-    grouped_sensing_actions = [[x.name for x in applicable_sensing_actions if o in x.name] for o in observable_variables]
-    observation_combinations = itertools.product(*[group for group in grouped_sensing_actions if group])
+    #applying observations as combinations of possible sensing in a state.
+    grouped_sensing_actions = {}
+    for sa in applicable_sensing_actions:
+        for key, var in grounding.grounded_observable_variables.items():
+            if sa.name in [observed_literal_to_action_name(p) for p in var]:
+                grouped_sensing_actions.setdefault(key, []).append(sa.name)
+    observation_combinations = itertools.product(*[group for group in grouped_sensing_actions.values() if group])
     for combo in observation_combinations:
         s_a_o = s_a
         for action_name in combo:
@@ -198,33 +205,30 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
         if ground_predicate_wumpus and ground_predicate_gold:
             if ground_predicate_wumpus[0].terms == ground_predicate_gold[0].terms:
                 continue  # invalid state: wumpus and gold in the same location
-        print(f"Applying observation combination: {combo}")
+        log.debug(f"Applying observation combination: {combo}")
         new_states.add(s_a_o)
     return new_states
 
-def inverse_literal(literal: Predicate) -> Predicate:
-    if literal.name.startswith("K_pos_"):
-        return Predicate(f"K_neg_{literal.name[6:]}", *(literal.terms))
-    elif literal.name.startswith("K_neg_"):
-        return Predicate(f"K_pos_{literal.name[6:]}", *(literal.terms))
-    else:
-        raise ValueError("Literal must be a K_pos_ or K_neg_ literal.")
-
 def complement_literal(literal: Predicate, grounding: Grounding, state: State) -> set[Predicate]:
     ground_predicates = grounding.grounded_predicates
-    if any(literal.name == model.literal.name for model in grounding.grounded_sensing_models):
-        return {literal}
+    state_vars = grounding.grounded_state_variables | grounding.grounded_observable_variables
+    #if Kx then K~x' for other X=x
     if literal.name.startswith("K_pos_"):
-        complement_name = f"K_neg_{literal.name[6:]}"
-        return {p for p in ground_predicates if p.name == complement_name and p.terms != literal.terms}
+        for key, var in state_vars.items():
+            if literal in var:
+              complements = var - {literal}
+              return {inverse_literal(c) for c in complements}
+        return set()
+    #if K~x' for all X=x' except X=x, then Kx
     elif literal.name.startswith("K_neg_"):
-        x_in_state = {p for p in state if p.name == literal.name}
-        x_in_domain = {p for p in ground_predicates if p.name == literal.name}
-        if len(x_in_domain) - len(x_in_state | {literal}) == 1:
-            o_x = next(iter(x_in_domain - (x_in_state | {literal})))
-            return {inverse_literal(o_x), literal}
-        else:
-            return {literal}
+        for key, var in state_vars.items():
+            # if K_pos_x in var and var is not binary
+            if inverse_literal(literal) in var and literal not in var:
+                complements = var - {inverse_literal(literal)}
+                not_x_in_state = {c for c in complements if inverse_literal(c) in state}
+                if len(complements) - len(not_x_in_state) == 1:
+                    return complements - not_x_in_state
+        return set()
 
 def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
     assert all(isinstance(f, (Predicate, FunctionEqualTo)) for f in state)
@@ -234,21 +238,23 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
         return state
     elif isinstance(effect, Predicate):
         new_state = state
+        if effect.name == 'K_pos_EqualTo' and effect.terms[0] == effect.terms[1]:
+            return new_state
         if effect in state:
             return state
-        #print(f"Applying effect {effect}")
+        log.debug(f"Applying effect {effect}")
         effect_complements = complement_literal(effect, grounding, state)
         all_effects = {effect} | effect_complements
         for effect in all_effects:
             if inverse_literal(effect) in state:
-                new_state = set(f for f in state if f != inverse_literal(effect))
+                new_state = set(f for f in new_state if f != inverse_literal(effect))
         return frozenset(new_state | all_effects)
     elif isinstance(effect, Not):
-        #print(f"Applying effect {effect}")
+        log.debug(f"Applying effect {effect}")
         return frozenset(f for f in state if f != effect.argument)
     elif isinstance(effect, When):
         if check_formula(state, effect.condition):
-            #print(f"Applying effect {effect.effect} due to When condition {effect.condition}")
+            log.debug(f"Applying effect {effect.effect} due to When condition {effect.condition}")
             return apply_effect(state, effect.effect, grounding)
         else:
             return state
@@ -299,6 +305,7 @@ class Alive(Enum):
     UNKNOWN = 2
     PRUNED = 3
     NUM_PRUNED = 4
+    BAD_OBS = 5
 
 
 class StateSpaceNode:
@@ -319,6 +326,9 @@ class StateSpaceNode:
 
     def add_child(self, action: Action, node: "StateSpaceNode") -> None:
         self.children.setdefault(action, set()).add(node)
+    
+    def __lt__(self, other):
+         return self.id < other.id
 
 
 def get_num_vals(state: State) -> set[int]:
@@ -338,11 +348,10 @@ class StateSpaceGraph:
         self.domain = domain
         self.problem = problem
         grounding = Grounding(domain, problem)
-
         grounded_actions = grounding.grounded_actions
         grounded_sensing_models = grounding.grounded_sensing_models
-        sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models)
-
+        sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models, 
+                                                           grounding.grounded_observable_variables)
         self.next_id = 0
         queue = []
         self.nodes: dict[State, StateSpaceNode] = dict()
@@ -363,13 +372,13 @@ class StateSpaceGraph:
             self.next_id = 1
             self.nodes = {root_state: self.root}
             queue = [self.root]
-            print(f"Initial root state: {state_to_string(root_state)}")
+            log.debug(f"Initial root state: {state_to_string(root_state)}")
         while queue:
         #for _ in range(10):  # DZC: temporary hack to only do one iteration for testing
-            print(f"Queue size: {len(queue)}")
+            log.debug(f"Queue size: {len(queue)}")
             node = queue.pop(0)
             state = node.state
-            #print(f"Expanding node {node.id} with state {state_to_string(state)}")
+            log.debug(f"Expanding node {node.id} with state {state_to_string(state)}")
             if check_formula(state, problem.goal):
                 node.alive = Alive.ALIVE
                 node.goal = True
@@ -381,34 +390,33 @@ class StateSpaceGraph:
                 for s_a_o in new_states:
                     new_node = self.add_node(s_a_o, state, action)
                     if new_node:
-                        #print("created new node")
+                        log.debug(f"Created new node with state {state_to_string(s_a_o)}")
                         if max_num_val and any(v > max_num_val for v in get_num_vals(s_a_o)):
                             new_node.alive = Alive.NUM_PRUNED
                         elif selected_states and s_a_o not in selected_states:
                                 new_node.alive = Alive.PRUNED
                         else:
-                            #print(f"Adding new node with state {state_to_string(s_a_o)} to queue")
                             queue.append(new_node)
 
         compute_alive(self.nodes.values())
         if prune:
             self.prune_nodes()
         assert all(node.alive != Alive.UNKNOWN for node in self.nodes.values())
-        # assert self.root.alive == Alive.ALIVE, 'Problem {} is unsolvable'.format(problem.name)
+        assert self.root.alive == Alive.ALIVE, 'Problem {} is unsolvable'.format(problem.name)
 
     def add_node(self, state: State, parent_state: State, action: Action) -> Optional[StateSpaceNode]:
         parent = self.nodes[parent_state]
-        print(f"Adding child node to parent {parent.id} after action {action.name}")
+        log.debug(f"Adding child node to parent {parent.id} after action {action.name}")
         try:
             node = self.nodes[state]
-            print("this state already exists with id ", node.id)
+            log.debug(f"this state already exists with id {node.id}")
             new = False
         except KeyError:
             node = StateSpaceNode(state, self.next_id)
             self.next_id += 1
             self.nodes[state] = node
             new = True
-            print(f"Created new node with id= {node.id} add= {state_to_string(state - parent_state)} and delete= {state_to_string(parent_state - state)}")
+            log.debug(f"Created new node with id= {node.id} add= {state_to_string(state - parent_state)} and delete= {state_to_string(parent_state - state)}")
 
         parent.add_child(action, node)
         node.parents.add(parent)
@@ -421,17 +429,20 @@ class StateSpaceGraph:
         pruned_dead = []
         pruned_selected: list[State] = []
         for state, node in self.nodes.items():
-            if node.alive == Alive.DEAD and all([parent.alive == Alive.DEAD for parent in node.parents]):
+            if node.alive == Alive.BAD_OBS or (node.alive == Alive.DEAD and all([parent.alive == Alive.DEAD for parent in node.parents])):
                 pruned_dead.append(state)
-                print(f"Pruning dead node {node.id} with parents {[parent.id for parent in node.parents]}")
+                if node.alive == Alive.BAD_OBS:
+                    pruned_dead.extend([child.state for children in node.children.values() for child in children if child.state in self.nodes])
+                    log.debug(f"pruning children of bad observation node {node.id}: {[child.id for children in node.children.values() for child in children]}")
+                log.debug(f"Pruning dead node {node.id} with parents {[parent.id for parent in node.parents]}")
         before = len(self.nodes)
         for state in pruned_dead + pruned_selected:
-            del self.nodes[state]
+            if state in self.nodes:
+                del self.nodes[state]
         for node in self.nodes.values():
             for action, children in node.children.items():
                 node.children[action] = {child for child in children if child.state in self.nodes}
-        #log.info(f"Pruned {len(pruned_dead)} dead " f"out of {before} states in {self.problem.name}")
-        print(f"Pruned {len(pruned_dead)} dead " f"out of {before} states in {self.problem.name}")
+        log.info(f"Pruned {len(pruned_dead)} dead " f"out of {before} states in {self.problem.name}")
 
 
 def generate_state_space(domain: Domain, problem: Problem, selected_states: Optional[set[State]] = None):
@@ -445,7 +456,7 @@ def can_reach(node: StateSpaceNode, goal_nodes: Collection[StateSpaceNode]) -> b
         current_node = stack.pop()
         if current_node in goal_nodes:
             return True
-        if current_node.alive == Alive.DEAD:
+        if current_node.alive in [Alive.DEAD, Alive.BAD_OBS]:
             continue
         if current_node.alive == Alive.ALIVE:
             return True
@@ -454,7 +465,9 @@ def can_reach(node: StateSpaceNode, goal_nodes: Collection[StateSpaceNode]) -> b
         seen.add(current_node)
         for children in current_node.children.values():
             if all(child.alive != Alive.DEAD for child in children):
-                stack.extend(children)
+                bad_obs_children = {child for child in children if child.alive == Alive.BAD_OBS}
+                good_children = children - bad_obs_children
+                stack.extend(good_children)
     return False
 
 
@@ -464,8 +477,8 @@ def find_nodes_leading_to_dead(nodes: Collection[StateSpaceNode]) -> bool:
     while queue:
         node = queue.pop()
         if all(any(child.alive == Alive.DEAD for child in children) for children in node.children.values()):
-            node.alive = Alive.DEAD
-            print(f"Node {node.id} is now DEAD because all its children lead to DEAD nodes.")
+            node.alive = Alive.DEAD if node.alive != Alive.BAD_OBS else Alive.BAD_OBS
+            log.debug(f"Node {node.id} is now DEAD because all its children lead to DEAD nodes.")
             changed = True
             for parent in node.parents:
                 if parent.alive == Alive.UNKNOWN:
@@ -481,7 +494,7 @@ def find_node_not_reaching_goal(nodes: Collection[StateSpaceNode]) -> bool:
         node = queue.pop()
         if not can_reach(node, goal_nodes):
             node.alive = Alive.DEAD
-            print(f"Node {node.id} is now DEAD because it cannot reach any goal node.")
+            log.debug(f"Node {node.id} is now DEAD because it cannot reach any goal node.")
             changed = True
             for parent in node.parents:
                 if parent.alive == Alive.UNKNOWN:
@@ -489,32 +502,33 @@ def find_node_not_reaching_goal(nodes: Collection[StateSpaceNode]) -> bool:
     return changed
 
 def remove_unsolvable_instances(nodes: Collection[StateSpaceNode]) -> bool:
+    queue = [node for node in nodes if node.alive == Alive.DEAD]
     changed = False
-    goal_nodes = [node for node in nodes if node.alive in [Alive.ALIVE, Alive.PRUNED]]
-    root_node = next((node for node in nodes if node.id == 0), None)
-    seen = set()
-    if root_node and root_node.alive == Alive.DEAD:
-        queue  = [root_node.children.values()]
-        cur_node = root_node
-        while queue:
-            node = queue.pop(0)
-            if node in seen:
-                continue
-            seen.add(node)
-            if not can_reach(node, goal_nodes):
-                if not all(can_reach(child, goal_nodes) for children in node.children.values() for child in children):
-                    #to do todo
-                    print("hi")
-                cur_node = node
-
+    while queue:
+        node = queue.pop()
+        other_children = [children for parent in node.parents for children in parent.children.values()]
+        for children in other_children:
+            if node in children and any(sibling.alive != Alive.DEAD for sibling in children if sibling.id != node.id) and all(child.alive == Alive.DEAD for children in node.children.values() for child in children):
+                node.alive = Alive.BAD_OBS
+                log.debug(f"Node {node.id} with parents {[parent.id for parent in node.parents]} is now BAD_OBS because of alive siblings")
+                changed = True
+                parent_queue = [parent for parent in node.parents if parent.alive == Alive.DEAD]
+                while parent_queue:
+                    parent_node = parent_queue.pop()
+                    if any(child.alive in (Alive.ALIVE, Alive.UNKNOWN) for children in parent_node.children.values() for child in children):
+                        parent_node.alive = Alive.UNKNOWN
+                        parent_queue.extend([parent for parent in parent_node.parents if parent.alive == Alive.DEAD])
     return changed
 
 def compute_alive(nodes: Collection[StateSpaceNode]) -> None:
     changed = True
+    root_node = next((node for node in nodes if node.id == 0), None)
     while changed:
         changed = find_nodes_leading_to_dead(nodes)
         changed = find_node_not_reaching_goal(nodes) or changed
-        #changed = remove_unsolvable_instances(nodes) or changed
+        #if root node is not alive, there could be an unsolvable instance in the state space
+        if root_node and root_node.alive == Alive.DEAD:
+            changed = remove_unsolvable_instances(nodes) or changed
     for node in nodes:
         if node.alive == Alive.UNKNOWN:
             node.alive = Alive.ALIVE
