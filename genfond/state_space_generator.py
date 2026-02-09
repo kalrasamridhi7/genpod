@@ -35,6 +35,8 @@ from pddl.logic.functions import (
 )
 from pddl.logic.predicates import EqualTo
 
+from genfond.partially_observable_problem import PartiallyObservableProblem
+
 from .ground import Grounding, ground, inverse_literal
 
 log = logging.getLogger("genfond.state_space_generator")
@@ -112,13 +114,24 @@ def is_dnf(condition: Formula) -> bool:
     else:
         return False
 
+def is_cnf(condition: Formula) -> bool:
+    """Check if a formula is in CNF (Conjunctive Normal Form)."""
+    if isinstance(condition, And):
+        return all(isinstance(c, Or) and all(is_literal(l) for l in c.operands) for c in condition.operands)
+    elif isinstance(condition, Or):
+        return all(is_literal(l) for l in condition.operands)
+    elif is_literal(condition):
+        return True
+    else:
+        return False
+
 def observed_literal_to_action_name(literal: Predicate) -> str:
     """Convert a literal to a valid action name that matches the regex [A-Za-z][-_A-Za-z0-9]*"""
     # Convert the entire literal to string, remove parentheses, and replace spaces with underscores
     action_name = str(literal).replace('(', '').replace(')', '').replace(' ', '_')
-    return action_name    
+    return action_name
 
-def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel], 
+def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel],
                                      grounded_obs_variables: dict[Predicate, set[Predicate]]) -> list[Action]:
     sensing_actions = []
     for model in grounded_sensing_models:
@@ -128,21 +141,122 @@ def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel]
                 inverse_models.extend([m for m in grounded_sensing_models if m.literal in predicate_set - {model.literal}])
         if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
-        action_effect = And(*[get_effects_from_dnf(inverse_model.condition, model.literal) for inverse_model in inverse_models], model.literal)
+        #action_effect = And(*[get_effects_from_dnf(inverse_model.condition, model.literal) for inverse_model in inverse_models], model.literal)
+        #test: do not add observation token to sensing action effect to maintain markovian states.
+        action_effect = And(*[get_effects_from_dnf(inverse_model.condition, model.literal) for inverse_model in inverse_models])
         sensing_action = Action(
             name=observed_literal_to_action_name(model.literal),
             parameters=model.parameters,
-            precondition=And(model.precondition, Not(model.literal), *[Not(m.literal) for m in inverse_models]),
+            #precondition=And(model.precondition, Not(model.literal), *[Not(m.literal) for m in inverse_models]),
+            precondition=model.precondition,
             effect=action_effect
         )
         sensing_actions.append(sensing_action)
+        log.debug(f'sensing action: {sensing_action}')
     return sensing_actions
+
+def cnf_to_dnf(formula: Formula) -> Formula:
+    """
+    Convert a formula in CNF (Conjunctive Normal Form) to DNF (Disjunctive Normal Form).
+    CNF: (A ∨ B) ∧ (C ∨ D) 
+    DNF: (A ∧ C) ∨ (A ∧ D) ∨ (B ∧ C) ∨ (B ∧ D)
+    """
+    if not isinstance(formula, And):
+        return formula  # Already in DNF or atomic
+
+    # Extract all conjuncts (clauses)
+    conjuncts = list(formula.operands)
+
+    # Normalize clauses: convert each to a list of literals
+    clauses = []
+    for conjunct in conjuncts:
+        if isinstance(conjunct, Or):
+            clauses.append(list(conjunct.operands))
+        else:
+            clauses.append([conjunct])
+
+    # Sort clauses by size (smallest first) to potentially reduce intermediate size
+    clauses.sort(key=len)
+
+    # Iteratively apply distributive law instead of generating all combinations at once
+    # This can help with early termination and memory efficiency
+    result = clauses[0]
+
+    for clause in clauses[1:]:
+        new_terms = []
+        for term in result:
+            for literal in clause:
+                # Combine existing term with new literal
+                if isinstance(term, And):
+                    new_terms.append(And(*term.operands, literal))
+                else:
+                    new_terms.append(And(term, literal))
+        result = new_terms
+
+    # Convert result to proper DNF formula
+    if len(result) == 1:
+        return result[0]
+    else:
+        return Or(*result)
+
+def cnf_to_dnf_iterative(formula: Formula) -> Formula:
+    """
+    Convert CNF to DNF iteratively (more memory efficient than Cartesian product).
+    """
+    if not isinstance(formula, And):
+        return formula
+    
+    conjuncts = list(formula.operands)
+    
+    # Normalize clauses
+    clauses = []
+    for conjunct in conjuncts:
+        if isinstance(conjunct, Or):
+            clauses.append(list(conjunct.operands))
+        else:
+            clauses.append([conjunct])
+    
+    if not clauses:
+        return And()
+    
+    # Start with the first clause
+    result_terms = [[literal] for literal in clauses[0]]
+    
+    # Iteratively distribute with remaining clauses
+    for clause in clauses[1:]:
+        new_terms = []
+        for existing_term in result_terms:
+            for literal in clause:
+                # Combine existing term with new literal
+                new_terms.append(existing_term + [literal])
+        
+        result_terms = new_terms
+        
+        # Optional: Early termination if too many terms
+        if len(result_terms) > 10000:
+            log.warning(f"DNF conversion creating {len(result_terms)} terms - aborting")
+            #raise ValueError("CNF to DNF conversion would create too many terms")
+    
+    # Build final DNF formula
+    dnf_terms = []
+    for term in result_terms:
+        if len(term) == 1:
+            dnf_terms.append(term[0])
+        else:
+            dnf_terms.append(And(*term))
+    
+    if len(dnf_terms) == 1:
+        return dnf_terms[0]
+    else:
+        return Or(*dnf_terms)
 
 def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
     effect_list = []
     if not is_dnf(condition):
-        #condition = convert_to_dnf(condition)
-        raise ValueError("Sensing model condition is not in DNF.")
+        if is_cnf(condition):
+            condition = cnf_to_dnf_iterative(condition)
+        else:
+            raise ValueError("Condition is not in CNF or DNF.")
     if isinstance(condition, Or):
         for conjunct in condition.operands:
             for literal in conjunct.operands:
@@ -169,7 +283,7 @@ def apply_action_effect(state: State, action: Action, grounding: Grounding) -> S
     log.debug(f"Applying action effect for action {action.name}")
     return apply_effect(state, action.effect, grounding)
 
-def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action]) -> set[State]:
+def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action], true_observations: set[Predicate]=None) -> set[State]:
     if action:
         s_a = apply_action_effect(state, action, grounding)
     new_states = set()
@@ -182,11 +296,38 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
                 inverse_models.extend([m for m in grounding.grounded_sensing_models if m.literal in predicate_set - {model.literal}])
         if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
+        inverse_actions = [a for a in sensing_actions if a.name in [observed_literal_to_action_name(m.literal) for m in inverse_models]]
         if check_formula(s_a, sensing_action.precondition) and not any(check_formula(s_a, im.condition) for im in inverse_models):
-            applicable_sensing_actions.append(sensing_action)
+            #we don't want to sense inconsistently with the parent state. For example, don't sense glitter in a cell if K_neg_gold.
+            #Solution: repeated application of a sensing action should give us no new information!
+            #if not any(apply_action_effect(s_a, inverse_action, grounding) == s_a for inverse_action in inverse_actions):
+                applicable_sensing_actions.append(sensing_action)
     log.debug(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
     if not applicable_sensing_actions:
         return {s_a}
+    if true_observations is not None:
+        #apply observations according to ground truth
+        observation_combinations = set()
+        combo = set()
+        conj_formula = And(*true_observations)
+        s_a_aug = apply_effect(s_a, conj_formula, grounding)
+        s_a_o = s_a
+        for sensing_action in applicable_sensing_actions:
+            sensing_model = next((m for m in grounding.grounded_sensing_models if observed_literal_to_action_name(m.literal) == sensing_action.name), None)
+            if sensing_model and check_formula(s_a_aug, sensing_model.condition):
+                combo.add(sensing_action.name)
+        observation_combinations.add(frozenset(combo))
+        log.debug(f"Number of observation combinations: {len(observation_combinations)}")
+        for combo in observation_combinations:
+            s_a_o = s_a
+            for action_name in combo:
+                sensing_action = next((x for x in applicable_sensing_actions if x.name == action_name), None)
+                if sensing_action:
+                    s_a_o = apply_action_effect(s_a_o, sensing_action, grounding)
+            log.debug(f"Applying observation combination: {combo}")
+            new_states.add(s_a_o)
+        log.debug(f"Number of new states with observations: {len(new_states)}")
+        return new_states
     #applying observations as combinations of possible sensing in a state.
     grouped_sensing_actions = {}
     for sa in applicable_sensing_actions:
@@ -326,7 +467,7 @@ class StateSpaceNode:
 
     def add_child(self, action: Action, node: "StateSpaceNode") -> None:
         self.children.setdefault(action, set()).add(node)
-    
+
     def __lt__(self, other):
          return self.id < other.id
 
@@ -340,7 +481,7 @@ class StateSpaceGraph:
     def __init__(
         self,
         domain: Domain,
-        problem: Problem,
+        problem: PartiallyObservableProblem,
         prune: bool = True,
         selected_states: Optional[set[State]] = None,
         max_num_val: Optional[int] = None,
@@ -350,7 +491,7 @@ class StateSpaceGraph:
         grounding = Grounding(domain, problem)
         grounded_actions = grounding.grounded_actions
         grounded_sensing_models = grounding.grounded_sensing_models
-        sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models, 
+        sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models,
                                                            grounding.grounded_observable_variables)
         self.next_id = 0
         queue = []
@@ -373,10 +514,18 @@ class StateSpaceGraph:
             self.nodes = {root_state: self.root}
             queue = [self.root]
             log.debug(f"Initial root state: {state_to_string(root_state)}")
-        while queue:
-        #for _ in range(10):  # DZC: temporary hack to only do one iteration for testing
+            true_observations = grounding.problem.hidden_predicates.copy() if grounding.problem.hidden_predicates else []
+            cur_obs_index = 0
+        exists = 0
+        while queue or true_observations:
+            log.debug(f"true_observations size: {len(true_observations)}")
             log.debug(f"Queue size: {len(queue)}")
-            node = queue.pop(0)
+            if (not queue) and true_observations:
+                true_observations.pop(0)
+                exists = 0
+                node = self.root
+            else:
+                node = queue.pop(0)
             state = node.state
             log.debug(f"Expanding node {node.id} with state {state_to_string(state)}")
             if check_formula(state, problem.goal):
@@ -386,7 +535,10 @@ class StateSpaceGraph:
             for j, action in enumerate(grounded_actions):
                 if not check_formula(state, action.precondition):
                     continue
-                new_states = apply_action_effect_with_observations(state, action, grounding, sensing_actions)
+                if true_observations:
+                    new_states = apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_observations[cur_obs_index])
+                else:
+                    new_states = apply_action_effect_with_observations(state, action, grounding, sensing_actions)
                 for s_a_o in new_states:
                     new_node = self.add_node(s_a_o, state, action)
                     if new_node:
@@ -397,12 +549,18 @@ class StateSpaceGraph:
                                 new_node.alive = Alive.PRUNED
                         else:
                             queue.append(new_node)
-
+                    else:
+                        if true_observations:
+                            queue.append(self.nodes[s_a_o])
+                            exists += 1
+            if exists > len(self.nodes.values()) * 0.3:
+                queue = []
         compute_alive(self.nodes.values())
         if prune:
             self.prune_nodes()
         assert all(node.alive != Alive.UNKNOWN for node in self.nodes.values())
         assert self.root.alive == Alive.ALIVE, 'Problem {} is unsolvable'.format(problem.name)
+        log.info(f"Generated state space with {len(self.nodes)} nodes")
 
     def add_node(self, state: State, parent_state: State, action: Action) -> Optional[StateSpaceNode]:
         parent = self.nodes[parent_state]

@@ -1,0 +1,44 @@
+--------------------- Slurm Task Prolog ------------------------
+Job ID: 1698534
+Job name: genpod_test.bash
+Host: cn-413
+Date: So 8. Feb 23:24:42 CET 2026
+User: samridhi.kalra
+Slurm account: rleap
+Slurm partition: rleap_gpu_24gb
+Work dir: 
+------------------
+Node usage:
+JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+1695518 rleap_gpu dlplan_f martin.f  R    5:14:23      1 cn-413
+1695520 rleap_gpu dlplan_m martin.f  R    5:14:23      1 cn-413
+1695521 rleap_gpu dlplan_m martin.f  R    5:14:23      1 cn-413
+1698534 rleap_gpu genpod_t samridhi  R       0:00      1 cn-413
+------------------
+Show launch script with:
+sacct -B -j 
+------------------
+--------------------- Slurm Task Prolog ------------------------
+Running: 
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/__main__.py", line 219, in <module>
+    main()
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/__main__.py", line 167, in main
+    execute_policy(domain, problem, policy, config)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/execute_policy.py", line 15, in execute_policy
+    return execute_rule_policy(domain, problem, policy, config)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/execute_rule_policy.py", line 147, in execute_rule_policy
+    f"Executing policy:\n{policy}\nin {domain.name} for problem {problem.name} with features {policy.features}"
+AttributeError: 'NoneType' object has no attribute 'features'
+--------------------- Slurm Task Epilog ------------------------
+Job ID: 1698534
+Time: So 8. Feb 23:40:59 CET 2026
+Elapsed Time: 00:16:16
+Billing per second for TRES: billing=1012,cpu=32,mem=125G,node=1
+Show resource usage with e.g.:
+sacct -j 1698534 -o Elapsed,TotalCPU,UserCPU,SystemCPU,MaxRSS,ReqTRES%60,MaxDiskRead,MaxDiskWrite
+--------------------- Slurm Task Epilog ------------------------

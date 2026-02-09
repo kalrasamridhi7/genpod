@@ -19,6 +19,7 @@ from genfond.translate_domain import K_Translator
 
 from .iterative_solver import pnames, solve, solve_iteratively
 from .problem_iterator import MAX_COST
+from genfond.util import parse_hidden_state_predicates
 
 log = logging.getLogger("genfond")
 
@@ -35,11 +36,13 @@ def main():
     parser.add_argument("--one-shot", action="store_true", help="solve all problems at once")
     parser.add_argument("--name", help="Name of the problem set (default: domain name)")
     parser.add_argument("--output", "-o", help="Output file for the resulting policy (as pickle dump)")
+    parser.add_argument("--log-file", "-l", help="Output file for the log")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--stats", help="file to dump stats to")
     parser.add_argument("--config", type=argparse.FileType("r"), help="config file for parameters")
     parser.add_argument("--dump-config", help="dump effective config to file")
     parser.add_argument("--dump-clingo-program", help="dump clingo program to file")
+    parser.add_argument("--ground-truth", help="ground truth for the problems", nargs="*")
     parser.add_argument(
         "--type",
         choices=DEFAULT_TYPE_CONFIGS.keys(),
@@ -91,7 +94,7 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-8s %(message)s",
         filemode='w',
-        filename='output.log'
+        filename=args.log_file if args.log_file else None
     )
     signal.signal(signal.SIGINT, signal_handler)
     config = ConfigHandler(args.config, args.type, vars(args))
@@ -113,7 +116,9 @@ def main():
     problems = []
     for f in tqdm.tqdm(args.problem_file, disable=None):
         problems.append(pddl.parse_problem(f))
-    k_translator = K_Translator(domain, problems)
+    log.info("parsing ground truth for the problems")
+    hidden_state_predicates = parse_hidden_state_predicates(args.ground_truth) if args.ground_truth else None
+    k_translator = K_Translator(domain, problems, hidden_state_predicates)
     domain = k_translator.translated_domain
     problems = k_translator.translated_problems
     name = args.name if args.name else domain.name
@@ -126,8 +131,8 @@ def main():
     if args.one_shot:
         solve_cpu_time_start = time.process_time()
         solution = solve(
-            k_translator.translated_domain,
-            k_translator.translated_problems,
+            domain,
+            problems,
             config=config,
             complexity=config["max_complexity"],
             all_generators=False,

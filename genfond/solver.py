@@ -45,7 +45,8 @@ class Solver:
             parts.append(("min_feature_complexity", [clingo.Number(min_feature_complexity)]))
         self.control.ground(parts)
         assert isinstance(self.control.configuration.solve, clingo.Configuration)
-        self.control.configuration.solve.parallel_mode = num_threads or os.cpu_count()
+        parallel_mode_config = num_threads or os.cpu_count()
+        self.control.configuration.solve.parallel_mode = parallel_mode_config if parallel_mode_config <= 64 else 64
         self.solution: dict = dict()
         self.cost: list[int] = []
         self.statistics: dict = dict()
@@ -66,6 +67,7 @@ class Solver:
         self.cost = model.cost
 
     def solve(self) -> bool:
+        log.info("Starting solver")
         res = self.control.solve(on_model=self.on_model)
         self.statistics = self.control.statistics
         assert res.satisfiable is not None

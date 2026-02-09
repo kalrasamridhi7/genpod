@@ -1,4 +1,4 @@
-(define (problem p5x5_no_pit)
+(define (problem p5_no_pit)
     (:domain wumpus_no_pit)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects

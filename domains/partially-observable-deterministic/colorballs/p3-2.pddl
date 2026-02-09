@@ -2,7 +2,7 @@
     (:domain colorballs)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects
-        o1 - obj 
+        o1 o2 - obj 
         p1-1 p1-2 p1-3
         p2-1 p2-2 p2-3
         p3-1 p3-2 p3-3 - pos 
@@ -32,9 +32,11 @@
         (need-start)
 
         (not (trashed o1))
+        (not (trashed o2))
         (not (holding o1))
+        (not (holding o2))
 
     )
-    (:goal (and (trashed o1)))
+    (:goal (and (trashed o1) (trashed o2)))
 )
 

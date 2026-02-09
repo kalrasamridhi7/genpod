@@ -32,8 +32,9 @@ def main():
     k_translator = K_Translator(domain, [problem])
     domain = k_translator.translated_domain
     problem = k_translator.translated_problems[0]
-    actions_taken = execute_policy(domain, problem, policy, config)
-    log.info(f'{len(actions_taken)} actions taken: {", ".join([str(a) for a in actions_taken])}')
+    for i in range(100):
+        actions_taken = execute_policy(domain, problem, policy, config)
+        log.info(f'{len(actions_taken)} actions taken: {", ".join([str(a) for a in actions_taken])}')
 
 
 if __name__ == "__main__":

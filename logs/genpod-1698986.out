@@ -1,0 +1,30 @@
+--------------------- Slurm Task Prolog ------------------------
+Job ID: 1698986
+Job name: genpod_test.bash
+Host: cn-409
+Date: Mo 9. Feb 13:31:29 CET 2026
+User: samridhi.kalra
+Slurm account: rleap
+Slurm partition: rleap_gpu_24gb
+Work dir: 
+------------------
+Node usage:
+JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+1698588 rleap_gpu dlplan_m martin.f  R    3:06:14      1 cn-409
+1698986 rleap_gpu genpod_t samridhi  R       0:01      1 cn-409
+1698968 rleap_gpu iaml-bfs jakob.ge  R    1:00:00      1 cn-409
+------------------
+Show launch script with:
+sacct -B -j 
+------------------
+--------------------- Slurm Task Prolog ------------------------
+Running: 
+slurmstepd: error: *** JOB 1698986 ON cn-409 CANCELLED AT 2026-02-09T13:31:37 ***
+--------------------- Slurm Task Epilog ------------------------
+Job ID: 1698986
+Time: Mo 9. Feb 13:31:37 CET 2026
+Elapsed Time: 00:00:08
+Billing per second for TRES: billing=1012,cpu=32,mem=125G,node=1
+Show resource usage with e.g.:
+sacct -j 1698986 -o Elapsed,TotalCPU,UserCPU,SystemCPU,MaxRSS,ReqTRES%60,MaxDiskRead,MaxDiskWrite
+--------------------- Slurm Task Epilog ------------------------

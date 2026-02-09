@@ -11,6 +11,8 @@ from pddl.logic.functions import BinaryFunction, NumericFunction, NumericValue
 from pddl.logic.predicates import EqualTo
 from pddl.logic.terms import Constant, Term
 
+from genfond.partially_observable_problem import PartiallyObservableProblem
+
 TypeTag = Optional[name_type]
 
 
@@ -64,7 +66,8 @@ def _ground_quantified_formula(op: QuantifiedCondition, domain, problem, mapping
                 grounded_clause = _ground_formula(op.condition, mapping)
                 grounded_clauses.append(grounded_clause)
         if isinstance(op, ForallCondition):
-            return And(*grounded_clauses)
+            cnf_result = And(*grounded_clauses)
+            return cnf_result
         elif isinstance(op, ExistsCondition):
             return Or(*grounded_clauses)
     raise TypeError(f"{op}: unknown quantified condition type: {type(op)}")
@@ -178,7 +181,7 @@ def inverse_literal(literal: Predicate) -> Predicate:
         raise ValueError("Literal must be a K_pos_ or K_neg_ literal.")
 
 class Grounding:
-    def __init__(self, domain: Domain, problem: Problem):
+    def __init__(self, domain: Domain, problem: PartiallyObservableProblem):
         self.domain = domain
         self.problem = problem
         self.grounded_actions = ground(domain, problem)

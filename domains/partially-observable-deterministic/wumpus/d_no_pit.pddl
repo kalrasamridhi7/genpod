@@ -38,7 +38,7 @@
         :parameters (?j - pos)
         :model-for (not (glitter ?j))
         :precondition (and (at ?j) (alive))
-        :such-that (exists (?p - pos) (and (not (= ?p ?j)) (gold-at ?p)))
+        :such-that (not (gold-at ?j))
     )
     
     (:sensing-model

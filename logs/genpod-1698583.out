@@ -1,0 +1,42 @@
+--------------------- Slurm Task Prolog ------------------------
+Job ID: 1698583
+Job name: genpod_test.bash
+Host: cn-401
+Date: Mo 9. Feb 09:35:03 CET 2026
+User: samridhi.kalra
+Slurm account: rleap
+Slurm partition: rleap_gpu_24gb
+Work dir: 
+------------------
+Node usage:
+JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+1698583 rleap_gpu genpod_t samridhi  R       0:01      1 cn-401
+1549768 rleap_gpu stretch_ jaxon.ch  R 6-23:49:42      1 cn-401
+------------------
+Show launch script with:
+sacct -B -j 
+------------------
+--------------------- Slurm Task Prolog ------------------------
+Running: 
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/__main__.py", line 219, in <module>
+    main()
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/__main__.py", line 167, in main
+    execute_policy(domain, problem, policy, config)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/execute_policy.py", line 15, in execute_policy
+    return execute_rule_policy(domain, problem, policy, config)
+  File "/u/samridhi.kalra/master_thesis/genpod/genfond/execute_rule_policy.py", line 147, in execute_rule_policy
+    f"Executing policy:\n{policy}\nin {domain.name} for problem {problem.name} with features {policy.features}"
+AttributeError: 'NoneType' object has no attribute 'features'
+--------------------- Slurm Task Epilog ------------------------
+Job ID: 1698583
+Time: Mo 9. Feb 10:03:49 CET 2026
+Elapsed Time: 00:28:47
+Billing per second for TRES: billing=1012,cpu=32,mem=125G,node=1
+Show resource usage with e.g.:
+sacct -j 1698583 -o Elapsed,TotalCPU,UserCPU,SystemCPU,MaxRSS,ReqTRES%60,MaxDiskRead,MaxDiskWrite
+--------------------- Slurm Task Epilog ------------------------

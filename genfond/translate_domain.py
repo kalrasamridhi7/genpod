@@ -10,16 +10,19 @@ from pddl.core import Domain, Problem
 from pddl.action import Action
 from pddl.parser.symbols import Symbols
 from genfond.ground import ground_domain_predicates
+from genfond.partially_observable_problem import PartiallyObservableProblem
 
 log = logging.getLogger(__name__)
 
 class K_Translator:
     """A translator that translates a domain and problem to K-translation."""
-    def __init__(self, domain: Domain, problems: List[Problem]):
+    def __init__(self, domain: Domain, problems: List[Problem], hidden_predicates: dict[str, list[set[Predicate]]] = None):
         self.original_domain = domain
         self.original_problems = problems
         self.translated_domain = None
         self.translated_problems = []
+
+        translated_hidden_predicates = {}
 
         predicates = {
             self.k_pos_literal(pred) for pred in self.original_domain.predicates
@@ -57,7 +60,20 @@ class K_Translator:
                 goal=self.k_translate_formula(problem.goal),
                 requirements=problem.requirements
             )
-            self.translated_problems.append(translated_problem)
+
+            if hidden_predicates is not None:
+                log.debug(f"Adding hidden predicates for problem {problem.name}")
+                # add hidden predicates for the problem
+                translated_hidden_predicates[problem.name] = []
+                for pred_set in hidden_predicates.get(problem.name, []):
+                    for fact in pred_set:
+                        if fact not in ground_predicates:
+                            raise ValueError(f"Hidden predicate {fact} is not a grounded predicate in the domain. {ground_predicates}")
+                    translated_set = {self.k_translate_formula(fact) for fact in pred_set}
+                    translated_hidden_predicates[problem.name].append(translated_set)
+                self.translated_problems.append(PartiallyObservableProblem(translated_problem, translated_hidden_predicates[problem.name]))
+            else:
+                self.translated_problems.append(PartiallyObservableProblem(translated_problem, []))
 
     def k_translate_formula(self, formula: Formula) -> Formula:
         """Translate a formula to K-translation."""

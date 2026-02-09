@@ -1,0 +1,22 @@
+--------------------- Slurm Task Prolog ------------------------
+Job ID: 1698995
+Job name: genpod_test.bash
+Host: cn-411
+Date: Mo 9. Feb 14:10:23 CET 2026
+User: samridhi.kalra
+Slurm account: rleap
+Slurm partition: rleap_gpu_24gb
+Work dir: 
+------------------
+Node usage:
+JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+1698991 rleap_gpu dlplan_b martin.f  R      26:27      1 cn-411
+1698992 rleap_gpu dlplan_g martin.f  R      26:27      1 cn-411
+1698995 rleap_gpu genpod_t samridhi  R       0:01      1 cn-411
+1698994 rleap_gpu Training maximili  R      16:34      1 cn-411
+------------------
+Show launch script with:
+sacct -B -j 
+------------------
+--------------------- Slurm Task Prolog ------------------------
+Running: 

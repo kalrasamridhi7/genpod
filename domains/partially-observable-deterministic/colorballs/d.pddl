@@ -13,7 +13,6 @@
         (obs-obj-at ?o - obj ?i - pos)
         (obs-obj-col ?o - obj ?c -col)
         (need-start)
-        (stuck)
     )
 
     (:state-variable (var-agent-at) (forall (?p - pos) (at ?p)))                          
@@ -51,21 +50,20 @@
 
     (:action move
         :parameters (?i ?j - pos)
-        :precondition (and (adj ?i ?j) (at ?i) (not (need-start)) (not (stuck)))
+        :precondition (and (adj ?i ?j) (at ?i) (not (need-start)) )
         :effect (and (not (at ?i)) (at ?j))
     )
 
     (:action pickup
         :parameters (?o - obj ?i - pos)
-        :precondition (and (at ?i) (obj-at ?o ?i) (not (need-start)) (not (stuck)))
+        :precondition (and (at ?i) (obj-at ?o ?i) (not (need-start)) )
         :effect (and (holding ?o) (not (obj-at ?o ?i)))
     )
     
     (:action trash
         :parameters (?o - obj ?c - col ?t - gar ?p - pos)
-        :precondition (and (color ?o ?c) (holding ?o) (garbage-at ?t ?p) (at ?p) (not (need-start)))
-        :effect (and (when (garbage-color ?t ?c) (and (trashed ?o) (not (holding ?o))))
-                    (when (not (garbage-color ?t ?c)) (stuck))
+        :precondition (and (holding ?o) (at ?p) (garbage-at ?t ?p) (color ?o ?c) (garbage-color ?t ?c))
+        :effect (and (when (and (garbage-color ?t ?c) (color ?o ?c)) (and (trashed ?o) (not (holding ?o))))
                 )
     )
 )
