@@ -1,11 +1,10 @@
 (define (domain colorballs)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
-    (:types pos obj col gar)
+    (:types pos obj col)
     (:predicates
         (adj ?i ?j - pos)
         (color ?o - obj ?c - col)
-        (garbage-at ?t - gar ?p - pos)
-        (garbage-color ?t - gar ?c - col)
+        (garbage-at ?c - col ?p - pos)
         (trashed ?o - obj)
         (at ?i - pos)
         (holding ?o - obj)
@@ -17,8 +16,7 @@
     )
 
     (:state-variable (adj-var ?p ?q - pos) (adj ?p ?q))
-    (:state-variable (garbage-at-var ?t - gar ?p - pos) (garbage-at ?t ?p))
-    (:state-variable (garbage-color-var ?t - gar ?c - col) (garbage-color ?t ?c))
+    (:state-variable (garbage-at-var ?c - col) (forall (?p - pos) (garbage-at ?c ?p)))
     (:state-variable (trashed-var ?o - obj) (trashed ?o))
     (:state-variable (holding-var ?o - obj) (holding ?o))
     (:state-variable (var-agent-at) (forall (?p - pos) (at ?p)))                          
@@ -67,8 +65,8 @@
     )
     
     (:action trash
-        :parameters (?o - obj ?c - col ?t - gar ?p - pos)
-        :precondition (and (holding ?o) (at ?p) (garbage-at ?t ?p) (color ?o ?c) (garbage-color ?t ?c))
+        :parameters (?o - obj ?c - col ?p - pos)
+        :precondition (and (holding ?o) (at ?p) (garbage-at ?c ?p) (color ?o ?c))
         :effect (and (trashed ?o) (not (holding ?o)) (arm-free))
     )
 )

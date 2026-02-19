@@ -29,6 +29,7 @@
         (not (trashed o2))
         (not (holding o1))
         (not (holding o2))
+        (arm-free)
 
     )
     (:goal (and (trashed o1) (trashed o2)))

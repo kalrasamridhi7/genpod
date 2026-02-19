@@ -137,8 +137,11 @@ def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel]
     for model in grounded_sensing_models:
         inverse_models = []
         for key, predicate_set in grounded_obs_variables.items():
-            if model.literal in predicate_set:
-                inverse_models.extend([m for m in grounded_sensing_models if m.literal in predicate_set - {model.literal}])
+            if model.literal in predicate_set or inverse_literal(model.literal) in predicate_set:
+                if len(predicate_set) == 1:         #binary variable
+                    inverse_models.extend([m for m in grounded_sensing_models if m.literal == inverse_literal(model.literal)])
+                else:
+                    inverse_models.extend([m for m in grounded_sensing_models if m.literal in predicate_set - {model.literal}])
         if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
         #action_effect = And(*[get_effects_from_dnf(inverse_model.condition, model.literal) for inverse_model in inverse_models], model.literal)
@@ -152,7 +155,7 @@ def convert_sensing_model_to_actions(grounded_sensing_models: list[SensingModel]
             effect=action_effect
         )
         sensing_actions.append(sensing_action)
-        log.debug(f'sensing action: {sensing_action}')
+        #log.debug(f'sensing action: {sensing_action}')
     return sensing_actions
 
 def cnf_to_dnf(formula: Formula) -> Formula:
@@ -292,15 +295,18 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
         model = next((m for m in grounding.grounded_sensing_models if observed_literal_to_action_name(m.literal) == sensing_action.name), None)
         inverse_models = []
         for key, predicate_set in grounding.grounded_observable_variables.items():
-            if model.literal in predicate_set:
-                inverse_models.extend([m for m in grounding.grounded_sensing_models if m.literal in predicate_set - {model.literal}])
+            if model.literal in predicate_set or inverse_literal(model.literal) in predicate_set:
+                if len(predicate_set) == 1:         #binary variable
+                    inverse_models.extend([m for m in grounding.grounded_sensing_models if m.literal == inverse_literal(model.literal)])
+                else:
+                    inverse_models.extend([m for m in grounding.grounded_sensing_models if m.literal in predicate_set - {model.literal}])
         if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
         inverse_actions = [a for a in sensing_actions if a.name in [observed_literal_to_action_name(m.literal) for m in inverse_models]]
         if check_formula(s_a, sensing_action.precondition) and not any(check_formula(s_a, im.condition) for im in inverse_models):
             #we don't want to sense inconsistently with the parent state. For example, don't sense glitter in a cell if K_neg_gold.
             #Solution: repeated application of a sensing action should give us no new information!
-            #if not any(apply_action_effect(s_a, inverse_action, grounding) == s_a for inverse_action in inverse_actions):
+            if not any(apply_action_effect(s_a, inverse_action, grounding) == s_a for inverse_action in inverse_actions):
                 applicable_sensing_actions.append(sensing_action)
     log.debug(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
     if not applicable_sensing_actions:
@@ -317,7 +323,7 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
             if sensing_model and check_formula(s_a_aug, sensing_model.condition):
                 combo.add(sensing_action.name)
         observation_combinations.add(frozenset(combo))
-        log.debug(f"Number of observation combinations: {len(observation_combinations)}")
+        #log.debug(f"Number of observation combinations: {len(observation_combinations)}")
         for combo in observation_combinations:
             s_a_o = s_a
             for action_name in combo:
@@ -326,12 +332,14 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
                     s_a_o = apply_action_effect(s_a_o, sensing_action, grounding)
             log.debug(f"Applying observation combination: {combo}")
             new_states.add(s_a_o)
-        log.debug(f"Number of new states with observations: {len(new_states)}")
+        #log.debug(f"Number of new states with observations: {len(new_states)}")
         return new_states
     #applying observations as combinations of possible sensing in a state.
     grouped_sensing_actions = {}
     for sa in applicable_sensing_actions:
         for key, var in grounding.grounded_observable_variables.items():
+            if len(var) == 1:         #binary variable
+                var = var | {inverse_literal(next(iter(var)))}
             if sa.name in [observed_literal_to_action_name(p) for p in var]:
                 grouped_sensing_actions.setdefault(key, []).append(sa.name)
     observation_combinations = itertools.product(*[group for group in grouped_sensing_actions.values() if group])
@@ -341,11 +349,11 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
             sensing_action = next((x for x in applicable_sensing_actions if x.name == action_name), None)
             if sensing_action:
                 s_a_o = apply_action_effect(s_a_o, sensing_action, grounding)
-        ground_predicate_wumpus = [p for p in s_a_o if isinstance(p, Predicate) and "pos_wumpus" in p.name]
+        '''ground_predicate_wumpus = [p for p in s_a_o if isinstance(p, Predicate) and "pos_wumpus" in p.name]
         ground_predicate_gold = [p for p in s_a_o if isinstance(p, Predicate) and "pos_gold" in p.name]
         if ground_predicate_wumpus and ground_predicate_gold:
             if ground_predicate_wumpus[0].terms == ground_predicate_gold[0].terms:
-                continue  # invalid state: wumpus and gold in the same location
+                continue  # invalid state: wumpus and gold in the same location'''
         log.debug(f"Applying observation combination: {combo}")
         new_states.add(s_a_o)
     return new_states
@@ -361,7 +369,7 @@ def complement_literal(literal: Predicate, grounding: Grounding, state: State) -
               return {inverse_literal(c) for c in complements}
         return set()
     #if K~x' for all X=x' except X=x, then Kx
-    elif literal.name.startswith("K_neg_"):
+    elif literal.name.startswith("K_neg_") and state:
         for key, var in state_vars.items():
             # if K_pos_x in var and var is not binary
             if inverse_literal(literal) in var and literal not in var:
@@ -383,7 +391,7 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
             return new_state
         if effect in state:
             return state
-        log.debug(f"Applying effect {effect}")
+        #log.debug(f"Applying effect {effect}")
         effect_complements = complement_literal(effect, grounding, state)
         all_effects = {effect} | effect_complements
         for effect in all_effects:
@@ -391,7 +399,7 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
                 new_state = set(f for f in new_state if f != inverse_literal(effect))
         return frozenset(new_state | all_effects)
     elif isinstance(effect, Not):
-        log.debug(f"Applying effect {effect}")
+        #log.debug(f"Applying effect {effect}")
         return frozenset(f for f in state if f != effect.argument)
     elif isinstance(effect, When):
         if check_formula(state, effect.condition):
@@ -516,16 +524,24 @@ class StateSpaceGraph:
             log.debug(f"Initial root state: {state_to_string(root_state)}")
             true_observations = grounding.problem.hidden_predicates.copy() if grounding.problem.hidden_predicates else []
             cur_obs_index = 0
-        exists = 0
+        seen = []
         while queue or true_observations:
+            #log.debug(f"current seen: {seen}")
             log.debug(f"true_observations size: {len(true_observations)}")
             log.debug(f"Queue size: {len(queue)}")
+            #log.debug(f"Current queue: {[node.id for node in queue]}")
+
             if (not queue) and true_observations:
                 true_observations.pop(0)
-                exists = 0
+                if not true_observations:
+                    continue
+                seen = []
                 node = self.root
             else:
                 node = queue.pop(0)
+                if node.id in seen:
+                    continue
+            seen.append(node.id)
             state = node.state
             log.debug(f"Expanding node {node.id} with state {state_to_string(state)}")
             if check_formula(state, problem.goal):
@@ -542,7 +558,7 @@ class StateSpaceGraph:
                 for s_a_o in new_states:
                     new_node = self.add_node(s_a_o, state, action)
                     if new_node:
-                        log.debug(f"Created new node with state {state_to_string(s_a_o)}")
+                        #log.debug(f"Created new node with state {state_to_string(s_a_o)}")
                         if max_num_val and any(v > max_num_val for v in get_num_vals(s_a_o)):
                             new_node.alive = Alive.NUM_PRUNED
                         elif selected_states and s_a_o not in selected_states:
@@ -552,9 +568,7 @@ class StateSpaceGraph:
                     else:
                         if true_observations:
                             queue.append(self.nodes[s_a_o])
-                            exists += 1
-            if exists > len(self.nodes.values()) * 0.3:
-                queue = []
+
         compute_alive(self.nodes.values())
         if prune:
             self.prune_nodes()

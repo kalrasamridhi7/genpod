@@ -6,7 +6,7 @@ import yaml
 DEFAULT_CONFIG = {
     "min_complexity": 2,
     "max_complexity": 15,
-    "policy_iterations": 100,
+    "policy_iterations": 10,
     "abort_on_cycle": False,
     "stop_after_first_solution": True,
     "policy_steps": 10000,

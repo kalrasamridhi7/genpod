@@ -55,21 +55,22 @@ def _ground_formula(op: Formula, mapping: dict[Variable, Constant]) -> Formula:
         raise TypeError(f"{op}: unknown operator type: {optype}")
 
 def _ground_quantified_formula(op: QuantifiedCondition, domain, problem, mapping: dict[Variable, Constant]) -> Formula:
-    if len(op.variables) > 1:
-        raise NotImplementedError("Grounding of quantified formulas with multiple variables is not implemented.")
     constants = domain.constants | problem.objects
-    for variable in op.variables:
-        grounded_clauses = []
-        for const in constants:
-            if _check_types(const, variable, domain.types):
-                mapping[variable] = const
-                grounded_clause = _ground_formula(op.condition, mapping)
-                grounded_clauses.append(grounded_clause)
-        if isinstance(op, ForallCondition):
-            cnf_result = And(*grounded_clauses)
-            return cnf_result
-        elif isinstance(op, ExistsCondition):
-            return Or(*grounded_clauses)
+    grounded_clauses = []
+    for grounding in itertools.product(constants, repeat=len(op.variables)):
+        if not all(_check_types(c, v, domain.types) for v, c in zip(op.variables, grounding)):
+            continue
+        else:
+            local_mapping = mapping.copy()
+            for var, const in zip(op.variables, grounding):
+                local_mapping[var] = const
+            grounded_clause = _ground_formula(op.condition, local_mapping)
+            grounded_clauses.append(grounded_clause)
+    if isinstance(op, ForallCondition):
+        cnf_result = And(*grounded_clauses)
+        return cnf_result
+    elif isinstance(op, ExistsCondition):
+        return Or(*grounded_clauses)
     raise TypeError(f"{op}: unknown quantified condition type: {type(op)}")
 
 
@@ -154,7 +155,7 @@ def ground_state_variables(domain, problem, grounded_predicates, is_observable) 
             for pred in grounded_predicates:
                 if pred.name == var.formula.name:
                     mapping = dict(zip(var.variable.terms, pred.terms))
-                    grounded_state_vars[_ground_formula(var.variable, mapping)] = set([pred, inverse_literal(pred)])
+                    grounded_state_vars[_ground_formula(var.variable, mapping)] = {pred}
         elif isinstance(var.formula, ForallCondition) and isinstance(var.formula.condition, Predicate):
             if len(var.parameters) == 0:
                 grounded_state_vars[var.variable] = set([pred for pred in grounded_predicates if pred.name == var.formula.condition.name])

@@ -13,6 +13,7 @@
         (alive)
     )
 
+    (:state-variable (adj-var ?p ?q - pos) (adj ?p ?q))
     (:state-variable (agent-pos) (forall (?p - pos) (at ?p)))                           
     (:state-variable (gold-pos) (got-the-treasure) (forall (?p - pos) (gold-at ?p)))    
     (:state-variable (wumpus-pos) (forall (?p - pos) (wumpus-at ?p)))

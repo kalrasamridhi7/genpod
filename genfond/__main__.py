@@ -42,7 +42,8 @@ def main():
     parser.add_argument("--config", type=argparse.FileType("r"), help="config file for parameters")
     parser.add_argument("--dump-config", help="dump effective config to file")
     parser.add_argument("--dump-clingo-program", help="dump clingo program to file")
-    parser.add_argument("--ground-truth", help="ground truth for the problems", nargs="*")
+    parser.add_argument("--train-set", help="ground truth for the problems", nargs="*")
+    parser.add_argument("--test-set", help="test set for the problems", nargs="*")
     parser.add_argument(
         "--type",
         choices=DEFAULT_TYPE_CONFIGS.keys(),
@@ -111,14 +112,14 @@ def main():
     total_wall_time_start = time.perf_counter()
     total_cpu_time_start = time.process_time()
     log.info("Parsing domain ...")
-    domain = pddl.parse_domain(args.domain_file)
+    orig_domain = pddl.parse_domain(args.domain_file)
     log.info("Parsing problems ...")
-    problems = []
+    orig_problems = []
     for f in tqdm.tqdm(args.problem_file, disable=None):
-        problems.append(pddl.parse_problem(f))
+        orig_problems.append(pddl.parse_problem(f))
     log.info("parsing ground truth for the problems")
-    hidden_state_predicates = parse_hidden_state_predicates(args.ground_truth) if args.ground_truth else None
-    k_translator = K_Translator(domain, problems, hidden_state_predicates)
+    hidden_state_predicates = parse_hidden_state_predicates(args.train_set) if args.train_set else None
+    k_translator = K_Translator(orig_domain, orig_problems, hidden_state_predicates)
     domain = k_translator.translated_domain
     problems = k_translator.translated_problems
     name = args.name if args.name else domain.name
@@ -160,6 +161,10 @@ def main():
         with open(args.output, "wb") as f:
             pickle.dump(policy, f)
     log.info("Verifying policy ...")
+    if args.test_set:
+        hidden_state_predicates = parse_hidden_state_predicates(args.test_set)
+        k_translator = K_Translator(orig_domain, orig_problems, hidden_state_predicates)
+        problems = k_translator.translated_problems
     with logging_redirect_tqdm():
         for problem in tqdm.tqdm([p for p in problems if p not in succs], disable=None):
             try:

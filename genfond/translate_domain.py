@@ -9,7 +9,7 @@ from pddl.helpers.base import ensure_set
 from pddl.core import Domain, Problem
 from pddl.action import Action
 from pddl.parser.symbols import Symbols
-from genfond.ground import ground_domain_predicates
+from genfond.ground import ground_domain_predicates, inverse_literal, ground_state_variables
 from genfond.partially_observable_problem import PartiallyObservableProblem
 
 log = logging.getLogger(__name__)
@@ -49,14 +49,11 @@ class K_Translator:
 
         for problem in self.original_problems:
             ground_predicates = ground_domain_predicates(domain, problem)
-            problem = enforce_closed_world_assumption(problem, ground_predicates)
             translated_problem = Problem(
                 name=problem.name,
                 domain=self.translated_domain,
                 objects=problem.objects,
-                init=ensure_set(
-                    [self.k_translate_formula(fact) for fact in problem.init]
-                ),
+                init=self._get_problem_init(problem),
                 goal=self.k_translate_formula(problem.goal),
                 requirements=problem.requirements
             )
@@ -199,22 +196,17 @@ class K_Translator:
         )
         return(var)
 
-def enforce_closed_world_assumption(problem: Problem, grounded_predicates: set[Predicate]) -> Problem:
-    """Enforce the closed world assumption on a problem by adding negated literals for all unmentioned grounded predicates."""
-    current_facts = problem.init
-    current_predicate_names = {fact.name for fact in current_facts if isinstance(fact, Predicate)}
-    all_facts = grounded_predicates
-    negated_facts = set()
-    for fact in all_facts:
-        if isinstance(fact, Predicate) and fact not in current_facts:
-            if fact.name in current_predicate_names:
-                negated_facts.add(Not(fact))
-    new_init = current_facts.union(negated_facts)
-    return Problem(
-        name=problem.name,
-        domain_name=problem.domain_name,
-        objects=problem.objects,
-        init=new_init,
-        goal=problem.goal,
-        requirements=problem.requirements
-    )
+    def _get_problem_init(self, problem: Problem) -> set[Predicate]:
+        """Get the initial state predicates from a problem."""
+        init = ensure_set([self.k_translate_formula(fact) for fact in problem.init])
+        grounded_domain_predicates = ground_domain_predicates(self.translated_domain, problem)
+        state_vars = ground_state_variables(self.translated_domain, problem, grounded_domain_predicates, is_observable=False)
+        #if Kx then K~x' for other X=x
+        for key, var in state_vars.items():
+            if len(var) == 1 and not any(l in init for l in var):
+                init = init | {inverse_literal(next(iter(var)))}
+            elif any(l in init for l in var):
+                for l in var:
+                    if l not in init:
+                        init = init | {inverse_literal(l)}
+        return init

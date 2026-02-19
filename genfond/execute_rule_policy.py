@@ -7,6 +7,8 @@ from dlplan.core import InstanceInfo, SyntacticElementFactory
 from pddl.action import Action
 from pddl.core import Domain, Problem
 
+from genfond.partially_observable_problem import PartiallyObservableProblem
+
 from .feature_generator import (
     Feature,
     _get_state_from_goal,
@@ -142,7 +144,7 @@ def state_string(state: State) -> str:
     return ",".join([str(p) for p in state])
 
 
-def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config: dict) -> list[str]:
+def execute_rule_policy(domain: Domain, problem: PartiallyObservableProblem, policy: Policy, config: dict) -> list[str]:
     log.info(
         f"Executing policy:\n{policy}\nin {domain.name} for problem {problem.name} with features {policy.features}"
     )
@@ -165,104 +167,108 @@ def execute_rule_policy(domain: Domain, problem: Problem, policy: Policy, config
     grounded_sensing_models = grounding.grounded_sensing_models
     sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models, grounding.grounded_observable_variables)
     log.debug("Grounding actions done.")
-    state = problem.init
-    for fact in problem.init:
-                for sensing_action in sensing_actions:
-                    if observed_literal_to_action_name(fact) == sensing_action.name:
-                        state = apply_action_effect(state, sensing_action, grounding)
-    trace: dict[State, State] = dict()
-    num_steps = 0
-    actions_taken = []
-    max_steps = config["policy_steps"]
-    while not check_formula(state, problem.goal) and (max_steps <= 0 or num_steps < max_steps):
-        if config["abort_on_cycle"]:
-            if state in trace:
-                log.error("Cycle detected!")
-                cycle = []
-                while state not in cycle:
-                    cycle.append(state)
-                    state = trace[state]
-                raise CycleError(trace, cycle)
-        log.info(f'New state: {",".join([str(p) for p in state])}')
-        feature_eval = eval_state(instance, mapping, features, problem, state, config)
-        bool_feature_eval = bool_eval_state(instance, mapping, features, problem, state, config)
-        enabled_rules = {rule for rule in policy.rules if state_satisfies_rule_conds(bool_feature_eval, rule.conds)}
-        log.debug("Enabled rules: {}".format(",  ".join([str(r) for r in enabled_rules])))
-        enabled_constraints = {
-            constraint
-            for constraint in policy.constraints
-            if state_satisfies_rule_conds(bool_feature_eval, constraint.conds)
-        }
-        print(policy.constraints)
-        log.debug("Enabled constraints: {}".format(",  ".join([str(c) for c in enabled_constraints])))
-        if not enabled_rules:
-            log.error("No rule enabled!")
-            raise RuntimeError("No rule enabled!")
-        found_rule = False
-        log.debug(
-            "Enabled actions: {}".format(
-                ", ".join([action_string(a) for a in grounded_actions if check_formula(state, a.precondition)])
-            )
-        )
-        for action in sorted(grounded_actions, key=lambda _: random.random()):
-            if not check_formula(state, action.precondition):
-                continue
-            succs = apply_action_effect_with_observations(state, action, grounding, sensing_actions)
+    true_observations = grounding.problem.hidden_predicates.copy() if grounding.problem.hidden_predicates else []
+
+    for i in range(len(true_observations) if true_observations else 1):
+        if true_observations:
+            log.info(f"True observations for run {i}: {true_observations[i]}")
+        state = problem.init
+        for fact in problem.init:
+                    for sensing_action in sensing_actions:
+                        if observed_literal_to_action_name(fact) == sensing_action.name:
+                            state = apply_action_effect(state, sensing_action, grounding)
+        trace: dict[State, State] = dict()
+        num_steps = 0
+        actions_taken = []
+        max_steps = config["policy_steps"]
+        while not check_formula(state, problem.goal) and (max_steps <= 0 or num_steps < max_steps):
+            if config["abort_on_cycle"]:
+                if state in trace:
+                    log.error("Cycle detected!")
+                    cycle = []
+                    while state not in cycle:
+                        cycle.append(state)
+                        state = trace[state]
+                    raise CycleError(trace, cycle)
+            log.debug(f'New state: {",".join([str(p) for p in state])}')
+            feature_eval = eval_state(instance, mapping, features, problem, state, config)
+            bool_feature_eval = bool_eval_state(instance, mapping, features, problem, state, config)
+            enabled_rules = {rule for rule in policy.rules if state_satisfies_rule_conds(bool_feature_eval, rule.conds)}
+            log.debug("Enabled rules: {}".format(",  ".join([str(r) for r in enabled_rules])))
+            enabled_constraints = {
+                constraint
+                for constraint in policy.constraints
+                if state_satisfies_rule_conds(bool_feature_eval, constraint.conds)
+            }
+            log.debug("Enabled constraints: {}".format(",  ".join([str(c) for c in enabled_constraints])))
+            if not enabled_rules:
+                log.error("No rule enabled!")
+                raise RuntimeError("No rule enabled!")
+            found_rule = False
             log.debug(
-                "Action {} has {} successors: {}".format(
-                    action_string(action),
-                    len(succs),
-                    ";\n ".join([state_string(s) for s in succs]),
+                "Enabled actions: {}".format(
+                    ", ".join([action_string(a) for a in grounded_actions if check_formula(state, a.precondition)])
                 )
             )
-            succs_evals = [eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
-            log.debug(f"succs_evals: {succs_evals}")
-            succs_diffs = {eval_state_diff(feature_eval, succ_eval) for succ_eval in succs_evals}
-            log.debug(f'succs_diffs:\n{";".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
-            ok = True
-            for constraint in enabled_constraints:
-                if constraint.effs & succs_diffs:
-                    log.info(f"Constraint {constraint} violated!")
-                    ok = False
-                    break
-            bool_succs_evals = [bool_eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
-            for bool_succs_eval in bool_succs_evals:
-                for state_constraint in policy.state_constraints:
-                    violated = True
-                    for feature, cond in state_constraint.conds.items():
-                        if cond != bool_succs_eval[feature]:
-                            violated = False
-                            break
-                    if violated:
-                        log.info(f"State constraint {state_constraint} violated!")
+            for action in sorted(grounded_actions, key=lambda _: random.random()):
+                if not check_formula(state, action.precondition):
+                    continue
+                succs = apply_action_effect_with_observations(state, action, grounding, sensing_actions, None)
+                log.debug(
+                    "Action {} has {} successors: {}".format(
+                        action_string(action),
+                        len(succs),
+                        ";\n ".join([state_string(s) for s in succs]),
+                    )
+                )
+                succs_evals = [eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
+                log.debug(f"succs_evals: {succs_evals}")
+                succs_diffs = {eval_state_diff(feature_eval, succ_eval) for succ_eval in succs_evals}
+                log.debug(f'succs_diffs:\n{";".join([", ".join([str(d) for d in ds]) for ds in succs_diffs])}')
+                ok = True
+                for constraint in enabled_constraints:
+                    if constraint.effs & succs_diffs:
+                        log.info(f"Constraint {constraint} violated!")
                         ok = False
                         break
+                bool_succs_evals = [bool_eval_state(instance, mapping, features, problem, succ, config) for succ in succs]
+                for bool_succs_eval in bool_succs_evals:
+                    for state_constraint in policy.state_constraints:
+                        violated = True
+                        for feature, cond in state_constraint.conds.items():
+                            if cond != bool_succs_eval[feature]:
+                                violated = False
+                                break
+                        if violated:
+                            log.info(f"State constraint {state_constraint} violated!")
+                            ok = False
+                            break
+                    if not ok:
+                        break
                 if not ok:
+                    continue
+                for rule in enabled_rules:
+                    log.debug(f"Checking rule {rule}")
+                    log.debug(f'rule effs type {type(rule.effs)} and :\n{";".join([", ".join([str(d) for d in ds]) for ds in rule.effs])}')
+                    if rule.effs == succs_diffs or policy.type == PolicyType.CONSTRAINED and rule.effs & succs_diffs:
+                        found_rule = True
+                        log.debug(f"Found matching rule:\n{rule}")
+                        log.info(f"Applying action {action_string(action)}")
+                        new_state = get_next_state(succs, action) if not true_observations else next(iter(apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_observations[i])), None)
+                        trace[state] = new_state
+                        state = new_state
+                        num_steps += 1
+                        actions_taken.append(action_string(action))
+                        break
+                if found_rule:
                     break
-            if not ok:
-                continue
-            for rule in enabled_rules:
-                log.debug(f"Checking rule {rule}")
-                log.debug(f'rule effs type {type(rule.effs)} and :\n{";".join([", ".join([str(d) for d in ds]) for ds in rule.effs])}')
-                if rule.effs == succs_diffs or policy.type == PolicyType.CONSTRAINED and rule.effs & succs_diffs:
-                    found_rule = True
-                    log.info(f"Found matching rule:\n{rule}")
-                    log.info(f"Applying action {action_string(action)}")
-                    new_state = get_next_state(succs, action)
-                    trace[state] = new_state
-                    state = new_state
-                    num_steps += 1
-                    actions_taken.append(action_string(action))
-                    break
-            if found_rule:
-                break
-        if not found_rule:
-            log.error(f"No matching rule found for diff {succs_diffs}!")
-            log.error("Enabled rules:\n  {}".format("\n  ".join([str(r) for r in enabled_rules])))
-            raise RuntimeError("No matching rule found!")
-    if not check_formula(state, problem.goal):
-        log.error("Goal not reached!")
-        raise RuntimeError("Goal not reached!")
-    log.info("Goal reached!")
-    log.debug(f"actions taken: {actions_taken}")
+            if not found_rule:
+                log.error(f"No matching rule found for diff {succs_diffs}!")
+                log.error("Enabled rules:\n  {}".format("\n  ".join([str(r) for r in enabled_rules])))
+                raise RuntimeError("No matching rule found!")
+        if not check_formula(state, problem.goal):
+            log.error("Goal not reached!")
+            raise RuntimeError("Goal not reached!")
+        log.info("Goal reached!")
+        log.info(f"actions taken: {actions_taken}")
     return actions_taken

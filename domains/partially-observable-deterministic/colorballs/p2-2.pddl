@@ -1,4 +1,4 @@
-(define (problem colorballs-2-1)
+(define (problem colorballs-2-2)
     (:domain colorballs)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects
@@ -26,6 +26,7 @@
         (not (holding o1))
         (not (trashed o2))
         (not (holding o2))
+        (arm-free)
 
     )
     (:goal (and (trashed o1) (trashed o2)))

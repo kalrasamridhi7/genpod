@@ -8,8 +8,9 @@ from genfond.config_handler import ConfigHandler
 from genfond.datalog_policy import DatalogPolicy
 from genfond.execute_policy import execute_policy
 from genfond.translate_domain import K_Translator
+from genfond.util import parse_hidden_state_predicates
 
-logging.basicConfig(format="%(message)s", level=logging.INFO)
+logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=logging.DEBUG, filename="logs/output/execute_policy_colorballs2-2.log", filemode="w")
 log = logging.getLogger(__name__)
 
 
@@ -20,6 +21,8 @@ def main():
     parser.add_argument("policy", help="policy file")
     parser.add_argument("-v", "--verbose", action="store_true", help="verbose output")
     parser.add_argument("--config", type=argparse.FileType("r"), help="config file")
+    parser.add_argument("--test-set", help="test set for the problems", nargs="*")
+    parser.add_argument("-i", "--policy-iterations", help="number of policy iterations", type=int, default=1)
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -29,12 +32,12 @@ def main():
     config = ConfigHandler(args.config, type, vars(args))
     domain = pddl.parse_domain(args.domain)
     problem = pddl.parse_problem(args.problem)
-    k_translator = K_Translator(domain, [problem])
+    hidden_predicates = parse_hidden_state_predicates(args.test_set) if args.test_set else None
+    k_translator = K_Translator(domain, [problem], hidden_predicates)
     domain = k_translator.translated_domain
     problem = k_translator.translated_problems[0]
-    for i in range(100):
-        actions_taken = execute_policy(domain, problem, policy, config)
-        log.info(f'{len(actions_taken)} actions taken: {", ".join([str(a) for a in actions_taken])}')
+    for i in range(args.policy_iterations):
+        execute_policy(domain, problem, policy, config)
 
 
 if __name__ == "__main__":

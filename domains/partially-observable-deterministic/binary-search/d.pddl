@@ -1,14 +1,34 @@
 (define (domain binary-search)
     (:types state)
-    (:predicates (secret ?p - state) (lt ?p ?q - state) (less-than) (discover-not-yet-attempted) (finish))
+    (:predicates 
+        (secret ?p - state)
+        (lt ?p ?q - state) 
+        (less-than) 
+        (discover-not-yet-attempted) 
+        (finish)
+        (testing ?p)
+    )
 
-    (:variable hidden-secret (forall (?p - state) (secret ?p)))
-    (:obs-variable obs-test (less-than)) ; binary (sensed) variable
+    (:state-variable (hidden-secret) (forall (?p - state) (secret ?p)))
+    (:obs-variable (obs-test) (less-than)) ; binary (sensed) variable
+
+    (:sensing-model
+        :parameters (?p - state)
+        :model-for (less-than ?p)
+        :precondition (testing ?p)
+        :such-that (exists (?q - state) (and (secret ?q) (lt ?q ?p)))
+    )
+
+    (:sensing-model
+        :parameters (?p - state)
+        :model-for (not (less-than ?p))
+        :precondition (testing ?p)
+        :such-that (or (secret ?p) (exists (?q - state) (and (secret ?q) (lt ?p ?q))))
+    )
 
     (:action test
         :parameters (?p - state)
-        :sensing (model-for obs-test (less-than) (exists (?q - state) (and (secret ?q) (lt ?q ?p))))
-                 (model-for obs-test (not (less-than)) (or (secret ?p) (exists (?q - state) (and (secret ?q) (lt ?p ?q)))))
+        :effect (testing ?p)
     )
 
     (:action discover	

@@ -6,39 +6,48 @@
         (at-col ?c - col ?i - pos)     ; (static) column for given position
         (at-row ?r - row ?i - pos)     ; (static) row for given position
         (right-col ?c - col ?i - pos)  ; (static) column to the right of given position
-        (even ?c - col)                ; (static) even-numbered columns
+        ;(even ?c - col)                ; (static) even-numbered columns
         (need-start)
         (at ?i - pos)                  ; current position
         (opened ?i - pos)              ; hidden and static
         (obs-open ?i - pos)            ; observable
     )
 
-    :sensing
-            (forall (?r - row ?c - col) such-that (and (at-row ?r ?j) (right-col ?c ?j))
-                (model-for (obs-at ?j) (obs-open ?j) (exists (?y - pos) (and (at-col ?c ?y) (at-row ?r ?y) (opened ?y))))
-                (model-for (obs-at ?j) (not (obs-open ?j)) (exists (?y - pos) (and (at-col ?c ?y) (not (at-row ?r ?y)) (opened ?y))))
-            )
+    (:state-variable (adj-var ?i ?j - pos) (adj ?i ?j))                     ; binary variable
+    (:state-variable (at-col-var ?c - col ?i - pos) (at-col ?c ?i))         ; binary variable
+    (:state-variable (at-row-var ?r - row ?i - pos) (at-row ?r ?i))         ; binary variable
+    (:state-variable (right-col ?c - col ?i - pos) (right-col ?c ?i))       ; binary variable
 
-    (:state-variable agent-pos (forall (?i - pos) (at ?i)))
-    (:state-variable (door-at ?c - col) such-that (even ?c) (forall (?i - pos) (when (at-col ?c ?i) (opened ?i))))
-    (:obs-variable (obs-at ?i - pos) (obs-open ?i))  ; binary variable
+    (:state-variable (agent-pos) (forall (?i - pos) (at ?i)))
+    ;(:state-variable (door-at ?c - col) such-that (even ?c) (forall (?i - pos) (when (at-col ?c ?i) (opened ?i))))
+    (:obs-variable (obs-at ?i - pos) (obs-open ?i))                         ; binary variable
 
     (:sensing-model
-        :parameters (?j - pos)
-        :model-for (stench ?j)
-        :precondition (at ?j)
-        :such-that (exists (?p - pos) (and (adj ?j ?p) (wumpus-at ?p)))
+        :parameters (?i - pos)
+        :model-for (obs-open ?i)
+        :precondition (at ?i)
+        :such-that (exists (?p - pos ?c - col ?r - row) (and (at-row ?r ?i) 
+                                                            (at-row ?r ?p) 
+                                                            (right-col ?c ?i) 
+                                                            (at-col ?c ?p)
+                                                            (opened ?p)))
+    )
+
+    (:sensing-model
+        :parameters (?i - pos)
+        :model-for (not (obs-open ?i))
+        :precondition (at ?i)
+        :such-that (exists (?p - pos ?c - col ?r - row) (and (at-row ?r ?i) 
+                                                            (at-row ?r ?p) 
+                                                            (right-col ?c ?i) 
+                                                            (at-col ?c ?p)
+                                                            (not (opened ?p))))
     )
                 
     (:action start
         :parameters (?i - pos)
         :precondition (and (at ?i) (need-start))
         :effect (not (need-start))
-        :sensing
-            (forall (?r - row ?c - col) such-that (and (at-row ?r ?i) (right-col ?c ?i))
-                (model-for (obs-at ?i) (obs-open ?i) (exists (?y - pos) (and (at-col ?c ?y) (at-row ?r ?y) (opened ?y))))
-                (model-for (obs-at ?i) (not (obs-open ?i)) (exists (?y - pos) (and (at-col ?c ?y) (not (at-row ?r ?y)) (opened ?y))))
-            )
     )
 
     (:action move
