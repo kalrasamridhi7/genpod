@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 class K_Translator:
     """A translator that translates a domain and problem to K-translation."""
-    def __init__(self, domain: Domain, problems: List[Problem], hidden_predicates: dict[str, list[set[Predicate]]] = None):
+    def __init__(self, domain: Domain, problems: List[Problem], hidden_predicates: dict[str, list[set[Formula]]] = None):
         self.original_domain = domain
         self.original_problems = problems
         self.translated_domain = None
@@ -62,11 +62,13 @@ class K_Translator:
                 log.debug(f"Adding hidden predicates for problem {problem.name}")
                 # add hidden predicates for the problem
                 translated_hidden_predicates[problem.name] = []
-                for pred_set in hidden_predicates.get(problem.name, []):
-                    for fact in pred_set:
-                        if fact not in ground_predicates:
-                            raise ValueError(f"Hidden predicate {fact} is not a grounded predicate in the domain. {ground_predicates}")
-                    translated_set = {self.k_translate_formula(fact) for fact in pred_set}
+                for formula_set in hidden_predicates.get(problem.name, []):
+                    for fact in formula_set:
+                        # Extract the predicate from the formula (handle both Predicate and Not(Predicate))
+                        pred = fact.argument if isinstance(fact, Not) else fact
+                        if pred not in ground_predicates:
+                            raise ValueError(f"Hidden predicate {pred} is not a grounded predicate in the domain. {ground_predicates}")
+                    translated_set = {self.k_translate_formula(fact) for fact in formula_set}
                     translated_hidden_predicates[problem.name].append(translated_set)
                 self.translated_problems.append(PartiallyObservableProblem(translated_problem, translated_hidden_predicates[problem.name]))
             else:
@@ -137,10 +139,10 @@ class K_Translator:
             raise ValueError("Other atomic formulas than Predicate and EqualTo are not supported.")
 
     def translate_action(self, action: Action) -> Action:
-        if is_literal(action.precondition) or isinstance(action.precondition, And) or action.precondition is None:
+        if is_literal(action.precondition) or isinstance(action.precondition, And) or isinstance(action.precondition, Or):
             new_precondition = self.k_translate_formula(action.precondition)
         else:
-            raise ValueError("Action precondition must be a literal or an And formula.")
+            raise ValueError("Action precondition must be a literal, And formula, or an Or formula.")
 
         new_effects = []
         # for each effect C -> X=x, we add KC -> Kx and ~K~C -> ~K~x. 

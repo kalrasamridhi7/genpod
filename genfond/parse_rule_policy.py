@@ -250,7 +250,7 @@ def parse_policy_file(filepath: str) -> Policy:
 
 # Example usage:
 if __name__ == "__main__":
-    policy = parse_policy_file("wumpus.policy")
+    policy = parse_policy_file("colorballs.policy")
     print(f"Parsed policy with {len(policy.rules)} rules and {len(policy.features)} features")
     print(f"Policy type: {policy.type}")
     print(f"Features: {list(policy.features)}")

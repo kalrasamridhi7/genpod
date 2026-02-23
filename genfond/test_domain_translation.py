@@ -13,11 +13,11 @@ logging.basicConfig(level=logging.DEBUG, filename='output1.log', filemode='w')
 
 def main():
     logger.info("test_domain_translation executed as script")
-    domain = parse_domain("domains/partially-observable-deterministic/wumpus/d.pddl")
-    #domain = parse_domain("domains/partially-observable-deterministic/wumpus/d_no_pit.pddl")
+    #domain = parse_domain("domains/partially-observable-deterministic/wumpus/d.pddl")
+    domain = parse_domain("domains/partially-observable-deterministic/colorballs/d.pddl")
     #problem = parse_problem("domains/partially-observable-deterministic/wumpus/p3/p3.pddl")
-    problem = parse_problem("domains/partially-observable-deterministic/wumpus/p2x3.pddl")
-    hidden_predicates = parse_hidden_state_predicates(["domains/partially-observable-deterministic/wumpus/p2x3_hidden.pddl"])
+    problem = parse_problem("domains/partially-observable-deterministic/colorballs/p3-1.pddl")
+    hidden_predicates = parse_hidden_state_predicates(["domains/partially-observable-deterministic/colorballs/p3-1_hidden.pddl"])
     #hidden_predicates = None
     k_translator = K_Translator(domain, [problem], hidden_predicates)
     translated_domain = k_translator.translated_domain

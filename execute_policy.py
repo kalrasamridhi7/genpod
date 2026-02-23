@@ -10,7 +10,7 @@ from genfond.execute_policy import execute_policy
 from genfond.translate_domain import K_Translator
 from genfond.util import parse_hidden_state_predicates
 
-logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=logging.DEBUG, filename="logs/output/execute_policy_colorballs2-2.log", filemode="w")
+logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=logging.DEBUG, filename="execute_policy_new.log", filemode="w")
 log = logging.getLogger(__name__)
 
 

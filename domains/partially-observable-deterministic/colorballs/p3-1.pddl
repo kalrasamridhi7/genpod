@@ -1,4 +1,4 @@
-(define (problem colorballs-3-1-1)
+(define (problem colorballs-3-1)
     (:domain colorballs)
     (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects

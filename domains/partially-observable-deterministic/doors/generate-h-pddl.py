@@ -54,24 +54,55 @@ def generate_random_combinations(even_cols, num_combinations):
     if num_combinations >= total_possible:
         print(f"Requested {num_combinations} combinations, but only {total_possible} possible.")
         print(f"Generating all {total_possible} combinations.")
-        return list(itertools.product(*col_lists))
+        all_combos = []
+        for combo in itertools.product(*col_lists):
+            selected = list(combo)
+            not_selected = []
+            for col_list in col_lists:
+                not_selected.extend([pos for pos in col_list if pos not in selected])
+            all_combos.append((selected, not_selected))
+        return all_combos
     
-    # Generate random unique combinations
-    combinations = set()
+    # Generate random unique combinations with non-selected positions
+    combinations = []
+    seen_combos = set()
+    
     while len(combinations) < num_combinations:
-        combo = tuple(random.choice(col_list) for col_list in col_lists)
-        combinations.add(combo)
+        selected = []
+        not_selected = []
+        
+        for col_list in col_lists:
+            chosen = random.choice(col_list)
+            selected.append(chosen)
+            # Track positions that were not selected from this column
+            not_selected.extend([pos for pos in col_list if pos != chosen])
+        
+        combo_tuple = tuple(selected)
+        if combo_tuple not in seen_combos:
+            seen_combos.add(combo_tuple)
+            combinations.append((selected, not_selected))
     
-    return list(combinations)
+    return combinations
 
 def write_hidden_file(problem_name, combinations, output_file):
     """Write hidden PDDL file with door combinations."""
     with open(output_file, 'w') as f:
         f.write(f"(define (problem {problem_name})\n")
         
-        for combo in combinations:
+        for selected, not_selected in combinations:
             # Write one :hidden clause per combination
-            hidden_str = " ".join([f"(opened {pos})" for pos in combo])
+            # Include opened doors and negated formulas for non-opened doors
+            formulas = []
+            
+            # Add opened doors
+            for pos in selected:
+                formulas.append(f"(opened {pos})")
+            
+            # Add (not (opened pos)) for all non-selected doors
+            for pos in not_selected:
+                formulas.append(f"(not (opened {pos}))")
+            
+            hidden_str = " ".join(formulas)
             f.write(f"    (:hidden {hidden_str})\n")
         
         f.write(")\n")

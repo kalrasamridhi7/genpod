@@ -31,7 +31,7 @@ def _ground_term(term: Term, mapping: dict[Variable, Constant]) -> Constant:
         raise TypeError(f"{term}: unknown term type: {term_type}")
 
 
-def _ground_formula(op: Formula, mapping: dict[Variable, Constant]) -> Formula:
+def _ground_formula(op: Formula, mapping: dict[Variable, Constant], domain: Domain = None, problem: Problem = None) -> Formula:
     optype = type(op)
     if optype == Predicate:
         return Predicate(op.name, *[_ground_term(t, mapping) for t in op.terms])
@@ -40,9 +40,11 @@ def _ground_formula(op: Formula, mapping: dict[Variable, Constant]) -> Formula:
     elif issubclass(optype, UnaryOp):
         return optype(_ground_formula(op.argument, mapping))
     elif issubclass(optype, BinaryOp):
-        return optype(*[_ground_formula(t, mapping) for t in op.operands])
+        return optype(*[_ground_formula(t, mapping, domain, problem) for t in op.operands])
     elif optype == And:
-        return optype(*[_ground_formula(t, mapping) for t in op.operands])
+        return optype(*[_ground_formula(t, mapping, domain, problem) for t in op.operands])
+    elif optype == Or:
+        return optype(*[_ground_formula(t, mapping, domain, problem) for t in op.operands])
     elif optype == When:
         return optype(_ground_formula(op.condition, mapping), _ground_formula(op.effect, mapping))
     elif issubclass(optype, BinaryFunction):
@@ -51,6 +53,8 @@ def _ground_formula(op: Formula, mapping: dict[Variable, Constant]) -> Formula:
         return op
     elif issubclass(optype, NumericFunction):
         return optype(op.name, *[_ground_term(t, mapping) for t in op.terms])
+    elif issubclass(optype, QuantifiedCondition):
+        return _ground_quantified_formula(op, domain, problem, mapping)
     else:
         raise TypeError(f"{op}: unknown operator type: {optype}")
 
@@ -64,7 +68,7 @@ def _ground_quantified_formula(op: QuantifiedCondition, domain, problem, mapping
             local_mapping = mapping.copy()
             for var, const in zip(op.variables, grounding):
                 local_mapping[var] = const
-            grounded_clause = _ground_formula(op.condition, local_mapping)
+            grounded_clause = _ground_formula(op.condition, local_mapping, domain, problem)
             grounded_clauses.append(grounded_clause)
     if isinstance(op, ForallCondition):
         cnf_result = And(*grounded_clauses)
@@ -139,7 +143,7 @@ def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]
             ground_model = SensingModel(
                 parameters=grounding,
                 literal=_ground_formula(model.literal, mapping),
-                condition=_ground_quantified_formula(model.condition, domain, problem, mapping) if isinstance(model.condition, QuantifiedCondition) else _ground_formula(model.condition, mapping),
+                condition=_ground_quantified_formula(model.condition, domain, problem, mapping) if isinstance(model.condition, QuantifiedCondition) else _ground_formula(model.condition, mapping, domain, problem),
                 precondition=_ground_formula(model.precondition, mapping) if model.precondition else None,
             )
             ground_models.add(ground_model)

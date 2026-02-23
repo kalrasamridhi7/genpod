@@ -1,5 +1,6 @@
 (define (problem bs-p5)
     (:domain binary-search)
+    (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects p0 p1 p2 p3 p4 - state)
     (:init
         (discover-not-yet-attempted)
@@ -10,4 +11,3 @@
     )
     (:goal (finish))
 )
-

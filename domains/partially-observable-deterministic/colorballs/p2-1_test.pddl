@@ -1,0 +1,5 @@
+(define (problem colorballs-2-1)
+    (:hidden (obj-at o1 p2-1) (color o1 red))
+    (:hidden (obj-at o1 p1-2) (color o1 red))
+    (:hidden (color o1 blue) (obj-at o1 p1-2))
+)

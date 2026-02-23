@@ -1,0 +1,7 @@
+(define (problem bs-p10)
+    (:hidden (secret p2))
+    (:hidden (secret p7))
+    (:hidden (secret p8))
+    (:hidden (secret p3))
+    (:hidden (secret p1))
+)

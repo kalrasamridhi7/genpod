@@ -1,5 +1,6 @@
 (define (problem bs-p10)
     (:domain binary-search)
+    (:requirements :strips :typing :existential-preconditions :partial-observability)
     (:objects p0 p1 p2 p3 p4 p5 p6 p7 p8 p9 - state)
     (:init
         (discover-not-yet-attempted)

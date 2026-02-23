@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --partition=rleap_gpu_24gb
+#SBATCH --partition=rleap_cpu
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64000
 #SBATCH --time=2-00
@@ -15,5 +15,5 @@ cd /u/samridhi.kalra/master_thesis/genpod/
 #    --test-set domains/partially-observable-deterministic/doors/p7_hidden.pddl
 
 apptainer run --bind $PWD genfond_env.sif python execute_policy.py domains/partially-observable-deterministic/doors/d.pddl  \
-    domains/partially-observable-deterministic/doors/p5.pddl output_policies/doors5x3.pickle \
+    domains/partially-observable-deterministic/doors/p5.pddl doors5x3_local.pickle \
     --test-set domains/partially-observable-deterministic/doors/p5_test.pddl

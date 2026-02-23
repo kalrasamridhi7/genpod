@@ -106,7 +106,7 @@ def check_formula(state: State, formula: Formula) -> bool:
 
 def is_dnf(condition: Formula) -> bool:
     if isinstance(condition, Or):
-        return all(isinstance(c, And) and all(is_literal(l) for l in c.operands) for c in condition.operands)
+        return all((isinstance(c, And) and all(is_literal(l) for l in c.operands)) or is_literal(c) for c in condition.operands)
     elif isinstance(condition, And):
         return all(is_literal(l) for l in condition.operands)
     elif is_literal(condition):
@@ -262,12 +262,15 @@ def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
             raise ValueError("Condition is not in CNF or DNF.")
     if isinstance(condition, Or):
         for conjunct in condition.operands:
-            for literal in conjunct.operands:
-                rest_conjuncts = set(conjunct.operands) - {literal}
-                effect_list.append(When(
-                    And(*rest_conjuncts, Not(literal)),
-                    inverse_literal(literal)
-                ))
+            if is_literal(conjunct):
+                effect_list.append(When(Not(conjunct), inverse_literal(literal)))
+            elif isinstance(conjunct, And):
+                for literal in conjunct.operands:
+                    rest_conjuncts = set(conjunct.operands) - {literal}
+                    effect_list.append(When(
+                        And(*rest_conjuncts, Not(literal)),
+                        inverse_literal(literal)
+                    ))
     elif isinstance(condition, And):
         for literal in condition.operands:
             rest_conjuncts = set(condition.operands) - {literal}
@@ -313,6 +316,7 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
         return {s_a}
     if true_observations is not None:
         #apply observations according to ground truth
+        log.debug(f"Applying true observations: {true_observations}")
         observation_combinations = set()
         combo = set()
         conj_formula = And(*true_observations)
