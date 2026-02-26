@@ -4,7 +4,7 @@ from pddl.logic.base import And, Formula, is_literal, Atomic, Not, Or, ForallCon
 from pddl.logic import Predicate, StateVariable, ObservableVariable, MultivaluedVariable
 from pddl.logic.predicates import EqualTo
 from pddl.logic.sensing_model import SensingModel
-from pddl.logic.effects import When, CondEffect
+from pddl.logic.effects import When, Forall
 from pddl.helpers.base import ensure_set
 from pddl.core import Domain, Problem
 from pddl.action import Action
@@ -88,13 +88,15 @@ class K_Translator:
             else:
                 raise ValueError("Negation of non-literal, non-And/Or formula is not supported.")
         elif isinstance(formula, Atomic):
-            if formula.name.startswith("K_pos_") or formula.name.startswith("K_neg_"):
+            if not isinstance(formula, EqualTo) and (formula.name.startswith("K_pos_") or formula.name.startswith("K_neg_")):
                 return formula  # Already translated
-            else:
+            elif isinstance(formula, Predicate):
                 return Predicate(
                     f"K_pos_{formula.name}",
                     *(formula.terms)
                 )
+            elif isinstance(formula, EqualTo):
+                return self.k_pos_literal(formula)
         elif isinstance(formula, And):
             return And(*[self.k_translate_formula(f) for f in formula.operands])
         elif isinstance(formula, Or):
@@ -156,8 +158,37 @@ class K_Translator:
                     new_effects.append(self.k_translate_formula(effect))
                 elif isinstance(effect, When):
                     new_effects.extend(self.translate_conditional_effect(effect))
+                elif isinstance(effect, Forall):
+                    if isinstance(effect.effect, When):
+                        translated_when_effects = self.translate_conditional_effect(effect.effect)
+                        translated_condition = And(translated_when_effects[0], translated_when_effects[1])
+                        new_effects.append(ForallCondition(
+                            variables=effect.variables,
+                            cond=translated_condition
+                        ))
+                    else:
+                        translated_condition = self.k_translate_formula(effect.effect)
+                    new_effects.append(ForallCondition(
+                        variables=effect.variables,
+                        cond=translated_condition
+                    ))
                 else:
-                    raise ValueError("Effect must be a literal or a When formula.")
+                    raise ValueError("Effect must be a literal, When, or ForallCondition formula.")
+        elif isinstance(action.effect, Forall):
+            effect = action.effect
+            if isinstance(effect.effect, When):
+                translated_when_effects = self.translate_conditional_effect(effect.effect)
+                translated_condition = And(translated_when_effects[0], translated_when_effects[1])
+                new_effects.append(ForallCondition(
+                    variables=effect.variables,
+                    cond=translated_condition
+                ))
+            else:
+                translated_condition = self.k_translate_formula(effect.effect)
+                new_effects.append(ForallCondition(
+                    variables=effect.variables,
+                    cond=translated_condition
+                ))
         else: raise ValueError("Action effect must be a literal, When, or And formula.")
         return Action(
             name=action.name,
@@ -172,11 +203,31 @@ class K_Translator:
                         self.k_translate_formula(when.condition),
                         self.k_translate_formula(when.effect)
                     )
-        cancellation_effect = When(
-                        Not(self.k_translate_formula(Not(when.condition))),
-                        Not(self.k_translate_formula(Not(when.effect)))
-                    )
-        new_effects.extend([support_effect, cancellation_effect])
+        
+        # Build cancellation condition: (¬K_not_x ∧ ¬K_not_y ∧ ... ∧ ¬K_not_z)
+        if isinstance(when.condition, And):
+            cancellation_condition_operands = [
+                Not(self.k_translate_formula(Not(cond))) 
+                for cond in when.condition.operands
+            ]
+            cancellation_condition = And(*cancellation_condition_operands)
+        else:
+            cancellation_condition = Not(self.k_translate_formula(Not(when.condition)))
+        
+        # Build cancellation effect: (¬K_not_a ∧ ¬K_not_b ∧ ... ∧ ¬K_not_c)
+        if isinstance(when.effect, And):
+            cancellation_effect_operands = [
+                Not(self.k_translate_formula(Not(effect))) 
+                for effect in when.effect.operands
+            ]
+            cancellation_effect_formula = And(*cancellation_effect_operands)
+        elif is_literal(when.effect):
+            cancellation_effect_formula = Not(self.k_translate_formula(Not(when.effect)))
+        else:
+            raise ValueError("Effect of a conditional effect must be a literal or an And formula.")
+        
+        cancellation_effect = When(cancellation_condition, cancellation_effect_formula)
+        new_effects = [support_effect, cancellation_effect]
         return new_effects
     
     def translate_sensing_model(self, model) -> SensingModel:

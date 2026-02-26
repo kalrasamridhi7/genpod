@@ -193,7 +193,7 @@ def main():
             "solved": len(succs),
             "maxProblemSize": max(len(p.objects) for p in problems) if succs else 0,
             "memUsage": mem_usage,
-            #'numFeatures': len(policy.features),
+            'numFeatures': len(policy.features),
             #'numConstraints': max(len(policy.state_constraints), len(policy.constraints)),
             "cost": policy.cost[0] if policy else 0,
         }

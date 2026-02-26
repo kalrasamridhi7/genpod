@@ -21,6 +21,11 @@ def _ground_term(term: Term, mapping: dict[Variable, Constant]) -> Constant:
     if isinstance(term, Constant):
         return term
     elif isinstance(term, Variable):
+        #hard code for localize domain where there's quantified action effects and the second variable does not get a type.
+        if len(term.type_tags) == 0:
+            for var in mapping.keys():
+                if var.name == term.name:
+                    return mapping[var]
         try:
             return mapping[term]
         except KeyError as e:
@@ -32,6 +37,7 @@ def _ground_term(term: Term, mapping: dict[Variable, Constant]) -> Constant:
 
 
 def _ground_formula(op: Formula, mapping: dict[Variable, Constant], domain: Domain = None, problem: Problem = None) -> Formula:
+    #print(f"Grounding formula: {op} with mapping: {mapping}")
     optype = type(op)
     if optype == Predicate:
         return Predicate(op.name, *[_ground_term(t, mapping) for t in op.terms])
@@ -93,14 +99,14 @@ def _check_types(constant: Constant, variable: Variable, type_dict: dict[TypeTag
     return any(_is_subtype(constant.type_tag, v_type, type_dict) for v_type in variable.type_tags)
 
 
-def ground_action(domain: Domain, action, grounding: tuple[Constant]) -> Optional[Action]:
+def ground_action(domain: Domain, problem: Problem, action, grounding: tuple[Constant]) -> Optional[Action]:
     if not isinstance(action, Action):
         action = [a for a in domain.actions if a.name == action][0]
     mapping = dict(zip(action.parameters, grounding))
     if not all(_check_types(c, v, domain.types) for v, c in mapping.items()):
         return None
     ground_precondition = _ground_formula(action.precondition, mapping)
-    ground_effect = _ground_formula(action.effect, mapping)
+    ground_effect = _ground_formula(action.effect, mapping, domain, problem)
     return Action(
         action.name,
         parameters=grounding,
@@ -114,7 +120,7 @@ def ground(domain: Domain, problem: Problem) -> list[Action]:
     operators = []
     for action in domain.actions:
         for grounding in itertools.product(constants, repeat=len(action.parameters)):
-            op = ground_action(domain, action, grounding)
+            op = ground_action(domain, problem, action, grounding)
             if op:
                 operators.append(op)
     return sorted(operators, key=lambda a: (a.name, a.parameters))
@@ -149,7 +155,7 @@ def ground_sensing_models(domain: Domain, problem: Problem) -> set[SensingModel]
             ground_models.add(ground_model)
     return ground_models
 
-def ground_state_variables(domain, problem, grounded_predicates, is_observable) -> dict[Predicate, set[Predicate]]:
+def ground_state_variables(domain: Domain, problem: Problem, grounded_predicates: set[Predicate], is_observable: bool) -> dict[Predicate, set[Predicate]]:
     grounded_state_vars = dict()
     multivalued_variables = domain.state_variables if not is_observable else domain.observable_variables
     for var in multivalued_variables:
@@ -163,6 +169,16 @@ def ground_state_variables(domain, problem, grounded_predicates, is_observable) 
         elif isinstance(var.formula, ForallCondition) and isinstance(var.formula.condition, Predicate):
             if len(var.parameters) == 0:
                 grounded_state_vars[var.variable] = set([pred for pred in grounded_predicates if pred.name == var.formula.condition.name])
+                # Exclude exception predicates if their terms match
+                if var.exception and isinstance(var.exception, Predicate):
+                    possible_exceptions = set([pred for pred in grounded_predicates if pred.name == var.exception.name])
+                    actual_exceptions = problem.init & possible_exceptions
+                    bad_state_values = set()
+                    for ex in actual_exceptions:
+                        for pred in grounded_state_vars[var.variable]:
+                            if ex.terms == pred.terms:
+                                bad_state_values.add(pred)
+                    grounded_state_vars[var.variable] -= bad_state_values
             else:
                 constants = domain.constants | problem.objects
                 for grounding in itertools.product(constants, repeat=var.variable.arity):
@@ -172,7 +188,7 @@ def ground_state_variables(domain, problem, grounded_predicates, is_observable) 
                     grounded_var = _ground_formula(var.variable, mapping)
                     grounded_state_vars[grounded_var] = set([x for x in grounded_predicates 
                                                              if x.name == var.formula.condition.name 
-                                                             and set(grounded_var.terms) <= set(x.terms)])
+                                                             and set(grounded_var.terms) <= set(x.terms)])                    
         else:
             raise ValueError("Unsupported formula type for state/observable variables")
     return grounded_state_vars

@@ -1,0 +1,11 @@
+(define (problem att-log5) 
+    (:hidden (at-ol package1 pgh-po) (at-ol package2 pgh-po) (at-ol package3 bos-po))
+    (:hidden (at-ol package1 pgh-po) (at-ol package2 pgh-po) (at-ol package3 phx-po))
+    (:hidden (at-ol package1 pgh-po) (at-ol package2 bos-po) (at-ol package3 bos-po))
+    (:hidden (at-ol package1 pgh-po) (at-ol package2 bos-po) (at-ol package3 phx-po))
+    (:hidden (at-ol package1 phx-po) (at-ol package2 pgh-po) (at-ol package3 bos-po))
+    (:hidden (at-ol package1 phx-po) (at-ol package2 pgh-po) (at-ol package3 phx-po))
+    (:hidden (at-ol package1 phx-po) (at-ol package2 bos-po) (at-ol package3 bos-po))
+    (:hidden (at-ol package1 phx-po) (at-ol package2 bos-po) (at-ol package3 phx-po))
+)
+

@@ -215,8 +215,8 @@ def solve_iteratively(
                     solved = True
                     for _ in range(config["policy_iterations"]):
                         try:
-                            plan = execute_policy(domain, problem, policy, config)
-                            plans.append(plan)
+                            plans = execute_policy(domain, problem, policy, config)
+                            #plans.append(plan)
                         except NoActionError as e:
                             log.info(f"Policy does not solve {problem.name}, no action in reachable state")
                             solved = False

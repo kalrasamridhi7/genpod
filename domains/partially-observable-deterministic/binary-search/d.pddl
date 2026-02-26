@@ -26,7 +26,7 @@
         :parameters (?p - state)
         :model-for (not (less-than ?p))
         :precondition (and (testing ?p) (discover-not-yet-attempted))
-        :such-that (or (secret ?p) (exists (?q - state) (and (secret ?q) (not (lt ?p ?q)))))
+        :such-that (or (secret ?p) (exists (?q - state) (and (secret ?q) (lt ?p ?q))))
     )
 
     (:action test

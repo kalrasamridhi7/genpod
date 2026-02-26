@@ -145,6 +145,7 @@ def state_string(state: State) -> str:
 
 
 def execute_rule_policy(domain: Domain, problem: PartiallyObservableProblem, policy: Policy, config: dict) -> list[str]:
+    plans = []
     log.info(
         f"Executing policy:\n{policy}\nin {domain.name} for problem {problem.name} with features {policy.features}"
     )
@@ -254,7 +255,13 @@ def execute_rule_policy(domain: Domain, problem: PartiallyObservableProblem, pol
                         found_rule = True
                         log.debug(f"Found matching rule:\n{rule}")
                         log.info(f"Applying action {action_string(action)}")
-                        new_state = get_next_state(succs, action) if not true_observations else next(iter(apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_observations[i])), None)
+                        if not true_observations:
+                            new_state = get_next_state(succs, action)
+                        else:
+                            result = apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_observations[i])
+                            new_states, updated_obs = result
+                            true_observations[i] = updated_obs
+                            new_state = next(iter(new_states), None)
                         trace[state] = new_state
                         state = new_state
                         num_steps += 1
@@ -271,4 +278,5 @@ def execute_rule_policy(domain: Domain, problem: PartiallyObservableProblem, pol
             raise RuntimeError("Goal not reached!")
         log.info("Goal reached!")
         log.info(f"actions taken: {actions_taken}")
-    return actions_taken
+        plans.append(actions_taken)
+    return plans

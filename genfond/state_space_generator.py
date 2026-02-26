@@ -82,6 +82,14 @@ def check_formula(state: State, formula: Formula) -> bool:
     elif isinstance(formula, Or):
         return any(check_formula(state, subformula) for subformula in formula.operands)
     elif isinstance(formula, Not):
+        ##if Kx or K~x is in state then we know something about x.  
+        #if isinstance(formula.argument, Predicate):
+        #    #log.debug(f"Checking NOT formula: {formula.argument} against state")
+        #    literal_name = formula.argument.name[6:] if formula.argument.name.startswith("K_pos_") or formula.argument.name.startswith("K_neg_") else None
+        #    for p in state:
+        #        if isinstance(p, Predicate) and p.name[6:] == literal_name and p.terms == formula.argument.terms:
+        #            #log.debug("returning False")
+        #            return False  
         return not check_formula(state, formula.argument)
     elif isinstance(formula, Predicate):
         if "pos_EqualTo" in formula.name:
@@ -263,7 +271,7 @@ def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
     if isinstance(condition, Or):
         for conjunct in condition.operands:
             if is_literal(conjunct):
-                effect_list.append(When(Not(conjunct), inverse_literal(literal)))
+                effect_list.append(When(Not(conjunct), inverse_literal(conjunct)))
             elif isinstance(conjunct, And):
                 for literal in conjunct.operands:
                     rest_conjuncts = set(conjunct.operands) - {literal}
@@ -286,12 +294,14 @@ def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
     return And(*effect_list)
 
 def apply_action_effect(state: State, action: Action, grounding: Grounding) -> State:
-    log.debug(f"Applying action effect for action {action.name}")
+    #log.debug(f"Applying action effect for action {action.name}")
     return apply_effect(state, action.effect, grounding)
 
-def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action], true_observations: set[Predicate]=None) -> set[State]:
+def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action], true_observations: set[Predicate]=None) -> tuple[set[State], set[Predicate]] | set[State]:
     if action:
         s_a = apply_action_effect(state, action, grounding)
+        if true_observations is not None:
+           update_true_obs = get_updated_true_observation(true_observations, state, action, grounding)
     new_states = set()
     applicable_sensing_actions = []
     for sensing_action in sensing_actions:
@@ -306,20 +316,23 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
         if not inverse_models:
             raise ValueError("No inverse model found for sensing model {}".format(model.literal))
         inverse_actions = [a for a in sensing_actions if a.name in [observed_literal_to_action_name(m.literal) for m in inverse_models]]
-        if check_formula(s_a, sensing_action.precondition) and not any(check_formula(s_a, im.condition) for im in inverse_models):
+        #if check_formula(s_a, sensing_action.precondition) and not any(check_formula(s_a, im.condition) for im in inverse_models):
+        if check_formula(s_a, sensing_action.precondition):
+            if true_observations is not None and update_true_obs != true_observations:
+                applicable_sensing_actions.append(sensing_action)
             #we don't want to sense inconsistently with the parent state. For example, don't sense glitter in a cell if K_neg_gold.
             #Solution: repeated application of a sensing action should give us no new information!
-            if not any(apply_action_effect(s_a, inverse_action, grounding) == s_a for inverse_action in inverse_actions):
+            elif not any(apply_action_effect(s_a, inverse_action, grounding) == s_a for inverse_action in inverse_actions):
                 applicable_sensing_actions.append(sensing_action)
-    log.debug(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
+    #log.debug(f"applicable_sensing_actions: {[a.name for a in applicable_sensing_actions]}")
     if not applicable_sensing_actions:
-        return {s_a}
+        return ({s_a}, update_true_obs) if true_observations is not None else {s_a}
     if true_observations is not None:
         #apply observations according to ground truth
-        log.debug(f"Applying true observations: {true_observations}")
+        log.debug(f"Applying true observations: {update_true_obs}")
         observation_combinations = set()
         combo = set()
-        conj_formula = And(*true_observations)
+        conj_formula = And(*update_true_obs)
         s_a_aug = apply_effect(s_a, conj_formula, grounding)
         s_a_o = s_a
         for sensing_action in applicable_sensing_actions:
@@ -337,7 +350,7 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
             log.debug(f"Applying observation combination: {combo}")
             new_states.add(s_a_o)
         #log.debug(f"Number of new states with observations: {len(new_states)}")
-        return new_states
+        return new_states, update_true_obs
     #applying observations as combinations of possible sensing in a state.
     grouped_sensing_actions = {}
     for sa in applicable_sensing_actions:
@@ -360,7 +373,7 @@ def apply_action_effect_with_observations(state: State, action: Action, groundin
                 continue  # invalid state: wumpus and gold in the same location'''
         log.debug(f"Applying observation combination: {combo}")
         new_states.add(s_a_o)
-    return new_states
+    return new_states  # true_observations is None in this path
 
 def complement_literal(literal: Predicate, grounding: Grounding, state: State) -> set[Predicate]:
     ground_predicates = grounding.grounded_predicates
@@ -386,9 +399,17 @@ def complement_literal(literal: Predicate, grounding: Grounding, state: State) -
 def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
     assert all(isinstance(f, (Predicate, FunctionEqualTo)) for f in state)
     if isinstance(effect, And):
+        new_state = state
         for sub_effect in effect.operands:
-            state = apply_effect(state, sub_effect, grounding)
-        return state
+            if isinstance(sub_effect, When):
+                if check_formula(state, sub_effect.condition):
+                    #log.debug(f"Applying effect {sub_effect.effect} due to When condition {sub_effect.condition}")
+                    new_state = apply_effect(new_state, sub_effect.effect, grounding)
+                else:
+                    continue
+            else:
+                new_state = apply_effect(new_state, sub_effect, grounding)
+        return new_state
     elif isinstance(effect, Predicate):
         new_state = state
         if effect.name == 'K_pos_EqualTo' and effect.terms[0] == effect.terms[1]:
@@ -407,7 +428,7 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
         return frozenset(f for f in state if f != effect.argument)
     elif isinstance(effect, When):
         if check_formula(state, effect.condition):
-            log.debug(f"Applying effect {effect.effect} due to When condition {effect.condition}")
+            #log.debug(f"Applying effect {effect.effect} due to When condition {effect.condition}")
             return apply_effect(state, effect.effect, grounding)
         else:
             return state
@@ -451,6 +472,23 @@ def get_observable_variables(domain: Domain) -> list[str]:
         if variable not in observable_variables:
             observable_variables.append(variable)
     return observable_variables
+
+def get_updated_true_observation(true_observation: set[Predicate], state, action, grounding):
+    #log.debug(f"update true observation for action {action.name} with current true observation {true_observation}")
+    new_true_observation = true_observation.copy()
+    s = apply_effect(state, And(*true_observation), grounding)
+    #log.debug(f"State after applying true observation effects: {state_to_string(s)}")
+    s_a = apply_action_effect(s, action, grounding)
+    if (s - s_a) & true_observation:
+        #collect K_pos literals
+        for obs in true_observation:
+            for l in (s_a - s):
+                if obs.name == l.name:
+                    new_true_observation.remove(obs)
+                    new_true_observation.add(l)
+    log.debug(f"Updated true observation from {true_observation} to {new_true_observation} after applying action {action.name}")
+    return new_true_observation
+
 
 class Alive(Enum):
     ALIVE = 0
@@ -505,6 +543,9 @@ class StateSpaceGraph:
         grounded_sensing_models = grounding.grounded_sensing_models
         sensing_actions = convert_sensing_model_to_actions(grounded_sensing_models,
                                                            grounding.grounded_observable_variables)
+        for action in grounded_actions:
+            if action.name == 'move-right':
+                log.debug(action)
         self.next_id = 0
         queue = []
         self.nodes: dict[State, StateSpaceNode] = dict()
@@ -525,10 +566,11 @@ class StateSpaceGraph:
             self.next_id = 1
             self.nodes = {root_state: self.root}
             queue = [self.root]
-            log.debug(f"Initial root state: {state_to_string(root_state)}")
+            #log.debug(f"Initial root state: {state_to_string(root_state)}")
             true_observations = grounding.problem.hidden_predicates.copy() if grounding.problem.hidden_predicates else []
             cur_obs_index = 0
         seen = []
+        true_obs_for_state = {}
         while queue or true_observations:
             #log.debug(f"current seen: {seen}")
             log.debug(f"true_observations size: {len(true_observations)}")
@@ -537,6 +579,7 @@ class StateSpaceGraph:
 
             if (not queue) and true_observations:
                 true_observations.pop(0)
+                true_obs_for_state = {}
                 if not true_observations:
                     continue
                 seen = []
@@ -556,13 +599,16 @@ class StateSpaceGraph:
                 if not check_formula(state, action.precondition):
                     continue
                 if true_observations:
-                    new_states = apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_observations[cur_obs_index])
+                    true_obs_for_state[node.id] = true_observations[cur_obs_index] if node.id not in true_obs_for_state else true_obs_for_state[node.id]
+                    log.debug(f"Applying action {action.name} to node {node.id} with true observations {true_obs_for_state[node.id]}")
+                    new_states, updated_obs = apply_action_effect_with_observations(state, action, grounding, sensing_actions, true_obs_for_state[node.id])
                 else:
                     new_states = apply_action_effect_with_observations(state, action, grounding, sensing_actions)
                 for s_a_o in new_states:
                     new_node = self.add_node(s_a_o, state, action)
                     if new_node:
                         #log.debug(f"Created new node with state {state_to_string(s_a_o)}")
+                        true_obs_for_state[new_node.id] = updated_obs if true_observations else None
                         if max_num_val and any(v > max_num_val for v in get_num_vals(s_a_o)):
                             new_node.alive = Alive.NUM_PRUNED
                         elif selected_states and s_a_o not in selected_states:
