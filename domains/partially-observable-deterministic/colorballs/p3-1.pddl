@@ -24,7 +24,7 @@
         (adj p3-2 p3-3) (adj p3-3 p3-2)
 
         (garbage-at t1 p1-1)
-        (garbage-at t2 p1-3)
+        (garbage-at t2 p3-3)
         (garbage-color t1 red)
         (garbage-color t2 blue)
 

@@ -1,4 +1,0 @@
-An agent needs to navigate and test certain rocks
-in the environment. The location of the rocks is
-known but their status isn't. The goal is to test
-all good rocks and skip the bad rocks.

@@ -1,0 +1,8 @@
+(define (problem p3x3)
+    (:hidden (wumpus-at p1-3))
+    (:hidden (wumpus-at p2-2))
+    (:hidden (wumpus-at p2-3))
+    (:hidden (wumpus-at p3-1))
+    (:hidden (wumpus-at p3-2))
+    (:hidden (wumpus-at p3-3))
+)

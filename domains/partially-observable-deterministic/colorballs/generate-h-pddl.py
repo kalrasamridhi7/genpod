@@ -127,27 +127,49 @@ def format_hidden_clause(scenario):
 
 def generate_h_pddl(problem_name, balls, positions, colors, num_scenarios, seed=None):
         """
-        Generate the complete h.pddl file.
+        Generate the complete h.pddl file with unique scenarios.
         
         Args:
                 problem_name: name of the problem from p.pddl
                 balls: list of ball objects
                 positions: list of available positions
                 colors: list of available colors
-                num_scenarios: number of scenarios to generate
+                num_scenarios: number of unique scenarios to generate
                 seed: random seed (optional)
         """
         if seed is not None:
                 random.seed(seed)
         
+        # Calculate maximum possible unique scenarios
+        max_possible = (len(positions) * len(colors)) ** len(balls)
+        
+        if num_scenarios > max_possible:
+                print(f"# Warning: Requested {num_scenarios} scenarios but only {max_possible} unique scenarios possible.", file=sys.stderr)
+                print(f"# Generating all {max_possible} possible scenarios instead.", file=sys.stderr)
+                num_scenarios = max_possible
+        
         # Generate header
         lines = [f"(define (problem {problem_name})"]
         
-        # Generate scenarios
-        for _ in range(num_scenarios):
+        # Generate unique scenarios
+        seen_scenarios = set()
+        attempts = 0
+        max_attempts = num_scenarios * 1000  # Prevent infinite loops
+        
+        while len(seen_scenarios) < num_scenarios and attempts < max_attempts:
+                attempts += 1
                 scenario = generate_scenario(balls, positions, colors)
-                hidden_clause = format_hidden_clause(scenario)
-                lines.append(hidden_clause)
+                
+                # Convert to hashable tuple for uniqueness check
+                scenario_tuple = tuple(sorted(scenario))
+                
+                if scenario_tuple not in seen_scenarios:
+                        seen_scenarios.add(scenario_tuple)
+                        hidden_clause = format_hidden_clause(scenario)
+                        lines.append(hidden_clause)
+        
+        if len(seen_scenarios) < num_scenarios:
+                print(f"# Warning: Could only generate {len(seen_scenarios)} unique scenarios out of {num_scenarios} requested.", file=sys.stderr)
         
         # Add closing parenthesis
         lines.append(")")

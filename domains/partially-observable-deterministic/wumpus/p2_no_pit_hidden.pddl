@@ -1,0 +1,5 @@
+(define (problem p2x2_no_pit)
+    (:hidden (gold-at p1-1) (wumpus-at p2-2))
+    (:hidden (gold-at p1-2) (wumpus-at p2-2))
+    (:hidden (gold-at p2-1) (wumpus-at p2-2))
+)

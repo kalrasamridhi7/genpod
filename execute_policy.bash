@@ -14,6 +14,6 @@ cd /u/samridhi.kalra/master_thesis/genpod/
 #    domains/partially-observable-deterministic/doors/p7.pddl doors5x3.pickle \
 #    --test-set domains/partially-observable-deterministic/doors/p7_hidden.pddl
 
-apptainer run --bind $PWD genfond_env.sif python execute_policy.py domains/partially-observable-deterministic/doors/d.pddl  \
-    domains/partially-observable-deterministic/doors/p5.pddl doors5x3_local.pickle \
-    --test-set domains/partially-observable-deterministic/doors/p5_test.pddl
+apptainer run --bind $PWD genfond_env.sif python execute_policy.py domains/partially-observable-deterministic/binary-search/d.pddl  \
+    domains/partially-observable-deterministic/binary-search/p10.pddl output/binary_search2.pickle \
+    --test-set domains/partially-observable-deterministic/binary-search/p10_test.pddl

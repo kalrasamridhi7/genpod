@@ -16,9 +16,6 @@
         (adj p2-2 p3-2) (adj p3-2 p2-2)
         
         (adj p3-1 p3-2) (adj p3-2 p3-1)
-
-        (not (stench p1-1))
-        (not (glitter p1-1))
         
         (need-start)
         (not (wumpus-at p1-1))

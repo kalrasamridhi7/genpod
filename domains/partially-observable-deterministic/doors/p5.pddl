@@ -122,6 +122,6 @@
         (opened p5-4)
         (opened p5-5)
     )
-    (:goal (at p5-3))
+    (:goal (at p5-5))
 )
 

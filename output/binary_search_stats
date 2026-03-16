@@ -1,2 +1,3 @@
 domain,constraintType,featurePoolSize,numStates,numTransitions,clingoAtoms,clingoRules,clingoCpuTime,maxFeatureComplexity,trainProblems,maxTrainProblemSize,bestSolveCpuTime,bestSolveWallTime,totalSolveCpuTime,totalWallTime,totalCpuTime,problems,solved,maxProblemSize,memUsage,numFeatures,cost
 binary-search,state,288,137,560,12511704.0,25657874.0,100.31822700000001,6,1,5,102.785269412,31.605937828309834,102.785269412,2363.137435309589,2434.2266351119997,3,3,50,6234.828125,2,7
+binary-search,state,55,137,560,2307552.0,4529413.0,38.289167,4,1,5,40.541045732,8.203769252635539,40.541045732,23249.837396577932,23281.818647537,7,7,50,3755.78515625,3,6

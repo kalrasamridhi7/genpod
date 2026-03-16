@@ -50,8 +50,6 @@
         (adj p5-3 p5-4) (adj p5-4 p5-3)
         (adj p5-4 p5-5) (adj p5-5 p5-4)
 
-        (not (stench p1-1))
-        (not (glitter p1-1))
         (need-start)
         (not (wumpus-at p1-1))
         (at p1-1)

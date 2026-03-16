@@ -294,7 +294,7 @@ def get_effects_from_dnf(condition: Formula, literal: Formula) -> Formula:
     return And(*effect_list)
 
 def apply_action_effect(state: State, action: Action, grounding: Grounding) -> State:
-    #log.debug(f"Applying action effect for action {action.name}")
+    log.debug(f"Applying action effect for action {action.name}")
     return apply_effect(state, action.effect, grounding)
 
 def apply_action_effect_with_observations(state: State, action: Action, grounding: Grounding, sensing_actions: list[Action], true_observations: set[Predicate]=None) -> tuple[set[State], set[Predicate]] | set[State]:
@@ -403,7 +403,7 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
         for sub_effect in effect.operands:
             if isinstance(sub_effect, When):
                 if check_formula(state, sub_effect.condition):
-                    #log.debug(f"Applying effect {sub_effect.effect} due to When condition {sub_effect.condition}")
+                    log.debug(f"Applying effect {sub_effect.effect} due to When condition {sub_effect.condition}")
                     new_state = apply_effect(new_state, sub_effect.effect, grounding)
                 else:
                     continue
@@ -416,7 +416,7 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
             return new_state
         if effect in state:
             return state
-        #log.debug(f"Applying effect {effect}")
+        log.debug(f"Applying effect {effect}")
         effect_complements = complement_literal(effect, grounding, state)
         all_effects = {effect} | effect_complements
         for effect in all_effects:
@@ -424,11 +424,11 @@ def apply_effect(state: State, effect: Formula, grounding: Grounding) -> State:
                 new_state = set(f for f in new_state if f != inverse_literal(effect))
         return frozenset(new_state | all_effects)
     elif isinstance(effect, Not):
-        #log.debug(f"Applying effect {effect}")
+        log.debug(f"Applying effect {effect}")
         return frozenset(f for f in state if f != effect.argument)
     elif isinstance(effect, When):
         if check_formula(state, effect.condition):
-            #log.debug(f"Applying effect {effect.effect} due to When condition {effect.condition}")
+            log.debug(f"Applying effect {effect.effect} due to When condition {effect.condition}")
             return apply_effect(state, effect.effect, grounding)
         else:
             return state
@@ -598,6 +598,7 @@ class StateSpaceGraph:
             for j, action in enumerate(grounded_actions):
                 if not check_formula(state, action.precondition):
                     continue
+                log.debug(f"Action {action.name} is applicable")
                 if true_observations:
                     true_obs_for_state[node.id] = true_observations[cur_obs_index] if node.id not in true_obs_for_state else true_obs_for_state[node.id]
                     log.debug(f"Applying action {action.name} to node {node.id} with true observations {true_obs_for_state[node.id]}")

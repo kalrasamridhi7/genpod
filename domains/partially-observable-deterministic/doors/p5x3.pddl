@@ -78,5 +78,5 @@
         (opened p3-5)
         
     )
-    (:goal (at p3-4))
+    (:goal (at p3-5))
 )

@@ -43,7 +43,7 @@
         ;(even c2)
 
         (need-start)
-        (at p1-1)
+        (at p1-2)
 
         (opened p1-1)
         (opened p1-2)

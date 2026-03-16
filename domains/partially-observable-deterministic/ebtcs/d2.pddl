@@ -23,7 +23,7 @@
         :parameters (?p - package ?b - bomb)
         :model-for (not (sensed ?p ?b))
         :precondition (testing)
-        :such-that (exists (?q - package) (not (in ?q ?b)))
+        :such-that (exists (?q - package) (and (not (= ?q ?p)) (in ?q ?b)))
     )
 
     (:action test	
@@ -40,7 +40,7 @@
 
     (:action flush	
         :parameters (?t - toilet)
-        :precondition (and )
+        :precondition (and (clogged ?t))
         :effect (and (not (clogged ?t)) (not (testing)))
     )
 )

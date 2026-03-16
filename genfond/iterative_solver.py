@@ -235,6 +235,8 @@ def solve_iteratively(
                             solved = False
                             problem_iterator.set_solved(problem, False)
                     if solved:
+                        if len(plans) == 1:
+                            plans = plans * 2  # avoid error for single sample
                         plan_lengths = [len(plan) for plan in plans]
                         log.info(
                             f"Policy already solves {problem.name}"

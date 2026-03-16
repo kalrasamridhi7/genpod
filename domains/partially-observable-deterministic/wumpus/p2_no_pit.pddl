@@ -11,9 +11,6 @@
         (adj p1-2 p2-2) (adj p2-2 p1-2)
         (adj p2-1 p2-2) (adj p2-2 p2-1)
 
-        (not (stench p1-1))
-        (not (glitter p1-1))
-        (not (gold-at p1-1))
         (need-start)
         (not (wumpus-at p1-1))
         (at p1-1)
