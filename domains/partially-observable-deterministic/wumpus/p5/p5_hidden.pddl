@@ -1,0 +1,7 @@
+(define (problem p5x5)
+    (:hidden (wumpus-at p3-3) (gold-at p5-3) (pit-at p2-4))
+    (:hidden (pit-at p4-1) (gold-at p1-3) (wumpus-at p3-1))
+    (:hidden (pit-at p2-4) (gold-at p5-4) (wumpus-at p3-4))
+    (:hidden (pit-at p4-2) (gold-at p3-3) (wumpus-at p5-3))
+    (:hidden (gold-at p3-2) (pit-at p4-2) (wumpus-at p5-3))
+)

@@ -1,0 +1,7 @@
+(define (problem btcs-5-1)
+    (:hidden (in p0 b0))
+    (:hidden (in p1 b0))
+    (:hidden (in p2 b0))
+    (:hidden (in p3 b0))
+    (:hidden (in p4 b0))
+)

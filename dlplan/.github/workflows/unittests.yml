@@ -1,0 +1,41 @@
+name: Googletest Unit Tests
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies and requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install setuptools wheel twine state_space_generator
+          python -m pip install -r requirements.txt
+
+      - name: Configure, Build, and Install Dependencies
+        run: |
+          cd dependencies
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/dependencies/installs
+          cmake --build build -j$(nproc)
+
+      - name: Configure, and Build DLPlan
+        run: |
+          cmake -DBUILD_TESTS:BOOL=TRUE -S . -B build -DCMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/dependencies/installs
+          cmake --build build -j$(nproc)
+
+      - name: Test
+        working-directory: build/tests
+        run: GTEST_OUTPUT=xml:test-results/ GTEST_COLOR=1 ctest -V

@@ -1,0 +1,6 @@
+(define (problem doors2x5)
+    (:hidden (opened p2-1) (opened p4-1) (not (opened p2-2)) (not (opened p4-2)))
+    (:hidden (opened p2-1) (opened p4-2) (not (opened p2-2)) (not (opened p4-1)))
+    (:hidden (opened p2-2) (opened p4-1) (not (opened p2-1)) (not (opened p4-2)))
+    (:hidden (opened p2-2) (opened p4-2) (not (opened p2-1)) (not (opened p4-1)))
+)
