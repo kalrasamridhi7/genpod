@@ -1,4 +1,4 @@
-# Generalized FOND Planning
+# Generalized POD Planning
 
 ## Installation
 
