@@ -1,6 +1,7 @@
 [tool.poetry]
 name = "genpod"
 version = "0.1.0"
+authors = ["anonymous"]
 description = ""
 license = "MIT"
 readme = "README.md"

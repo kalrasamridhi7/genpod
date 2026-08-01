@@ -25,6 +25,18 @@ You can then run benchmarks for respective pddl domains with:
 python -m genpod  domains/partially-observable-deterministic/localize/{d.pddl,p3.pddl,p5.pddl,p7.pddl} -o output/localize.pickle -l output_localize.log  --train-set domains/partially-observable-deterministic/localize/{p3_hidden.pddl,p5_hidden.pddl,p7_hidden.pddl} --test-set domains/partially-observable-deterministic/localize/{p3_test.pddl,p5_test.pddl,p7_test.pddl} --stats localize.stat
 
 ```
+### Building a Container Image
+
+Alternatively, you can build a container image with docker or podman:
+
+```
+docker build -t genpod .
+```
+
+You can then use a container to run all the scripts, e.g.:
+```
+docker run --rm -ti -v "$PWD":/workspace -w /workspace genpod python -m genpod domains/partially-observable-deterministic/localize/{d.pddl,p3.pddl,p5.pddl,p7.pddl} -o output/localize.pickle -l output_localize.log --train-set domains/partially-observable-deterministic/localize/{p3_hidden.pddl,p5_hidden.pddl,p7_hidden.pddl} --test-set domains/partially-observable-deterministic/localize/{p3_test.pddl,p5_test.pddl,p7_test.pddl} --stats localize.stat
+```
 
 ## Executing a policy
 
